@@ -135,7 +135,7 @@ class OpenAIRelay:
         for message in reversed(tail):
             message_length = cls._message_content_length(message)
             if selected_tail and remaining_tail_budget - message_length < 0:
-                continue
+                break
             selected_tail.append(message)
             remaining_tail_budget -= message_length
             if remaining_tail_budget <= 0:
@@ -148,7 +148,7 @@ class OpenAIRelay:
         for message in system_prefix:
             message_length = cls._message_content_length(message)
             if kept and remaining_system_budget - message_length < 0:
-                continue
+                break
             kept.append(message)
             remaining_system_budget -= message_length
             if remaining_system_budget <= 0:
