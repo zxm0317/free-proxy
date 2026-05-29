@@ -26,7 +26,10 @@ logger = logging.getLogger('free-proxy')
 app = FastAPI(title='free-proxy')
 
 _web_root = Path(__file__).resolve().parent / 'web'
-app.mount('/web', StaticFiles(directory=str(_web_root)), name='web')
+if _web_root.exists() and _web_root.is_dir():
+    app.mount('/web', StaticFiles(directory=str(_web_root)), name='web')
+else:
+    logger.warning(f"Web root directory not found: {_web_root}. Web UI will not be available.")
 
 _service: ProxyService | None = None
 _debug_enabled = False
@@ -51,9 +54,12 @@ def get_service() -> ProxyService:
 
 @app.on_event("startup")
 def startup_event():
-    logger.info('Initializing database connection and caching keys...')
-    get_service()
-    logger.info('Database cache initialized successfully.')
+    try:
+        logger.info('Initializing database connection and caching keys...')
+        get_service()
+        logger.info('Database cache initialized successfully.')
+    except Exception as exc:
+        logger.error(f"Startup initialization failed: {exc}")
 
 _security = HTTPBearer(auto_error=False)
 
