@@ -11,7 +11,7 @@ DOTENV_PATH = ROOT_DIR / '.env'
 
 @dataclass
 class Settings:
-    host: str = '127.0.0.1'
+    host: str = '0.0.0.0'
     port: int = 8765
     health_ttl: int = 600
     max_fallback_attempts: int = 5

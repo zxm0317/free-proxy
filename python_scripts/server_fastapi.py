@@ -8,9 +8,12 @@ import time
 from pathlib import Path
 
 import httpx
-from fastapi import FastAPI, Request
-from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
+from fastapi import Depends, FastAPI, HTTPException, Request, Security
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse, RedirectResponse
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel
+from starlette.concurrency import run_in_threadpool
 
 from .config import settings
 from .opencode_config import configure_opencode_provider, detect_opencode_config
@@ -46,6 +49,57 @@ def get_service() -> ProxyService:
         _service = ProxyService(debug_log=_debug_log)
     return _service
 
+@app.on_event("startup")
+def startup_event():
+    logger.info('Initializing database connection and caching keys...')
+    get_service()
+    logger.info('Database cache initialized successfully.')
+
+_security = HTTPBearer(auto_error=False)
+
+async def check_auth(credentials: HTTPAuthorizationCredentials | None = Security(_security)) -> str:
+    svc = get_service()
+    expected_key = svc.get_proxy_key()
+    if not expected_key:
+        raise HTTPException(status_code=401, detail='Proxy API Key is not configured. Please generate one in the UI first.')
+    if not credentials or credentials.scheme != 'Bearer' or credentials.credentials != expected_key:
+        raise HTTPException(status_code=401, detail='Invalid Proxy API Key')
+    return credentials.credentials
+
+def check_admin_auth(request: Request) -> str:
+    admin_pwd = get_service().get_admin_password()
+    token = request.cookies.get('adminToken')
+    if not token or token != admin_pwd:
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid Admin Password.",
+        )
+    return token
+
+def get_optional_admin_auth(request: Request) -> str | None:
+    token = request.cookies.get('adminToken')
+    admin_pwd = get_service().get_admin_password()
+    if token == admin_pwd:
+        return token
+    return None
+
+class LoginRequest(BaseModel):
+    password: str
+
+@app.post('/api/auth/login')
+async def auth_login(req: LoginRequest):
+    admin_pwd = get_service().get_admin_password()
+    if req.password == admin_pwd:
+        resp = JSONResponse({'ok': True})
+        resp.set_cookie('adminToken', admin_pwd, httponly=True, samesite='lax')
+        return resp
+    return JSONResponse({'ok': False, 'error': '密码错误'}, status_code=401)
+
+@app.post('/api/auth/logout')
+async def auth_logout():
+    resp = JSONResponse({'ok': True})
+    resp.delete_cookie('adminToken')
+    return resp
 
 def _invalid_json_response(*, openai: bool = False) -> JSONResponse:
     if openai:
@@ -81,7 +135,12 @@ def set_debug(enabled: bool) -> None:
 
 
 @app.middleware('http')
-async def log_requests(request: Request, call_next):
+async def security_and_log_middleware(request: Request, call_next):
+    if request.url.path in ['/docs', '/openapi.json', '/redoc']:
+        token = request.cookies.get('adminToken')
+        if _service and token != _service.get_admin_password():
+            return RedirectResponse(url='/login')
+
     if _debug_enabled:
         _debug_log(
             'request_received',
@@ -97,12 +156,23 @@ async def log_requests(request: Request, call_next):
             path=request.url.path,
             status=response.status_code,
         )
+    
+    response.headers['Content-Security-Policy'] = "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self' https:;"
+    response.headers['X-Frame-Options'] = 'DENY'
+    response.headers['X-Content-Type-Options'] = 'nosniff'
+    response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
+    response.headers['Permissions-Policy'] = 'geolocation=(), microphone=(), camera=()'
     return response
 
 
 @app.get('/')
 async def index():
     return FileResponse(str(_web_root / 'index.html'))
+
+
+@app.get('/login')
+async def login_page():
+    return FileResponse(str(_web_root / 'login.html'))
 
 
 @app.get('/health')
@@ -114,6 +184,18 @@ async def health():
 async def list_models():
     svc = get_service()
     return {'object': 'list', 'data': svc.public_models()}
+
+
+@app.get('/api/proxy-key', dependencies=[Depends(check_admin_auth)])
+async def get_proxy_key():
+    svc = get_service()
+    return {'key': svc.get_proxy_key()}
+
+
+@app.post('/api/proxy-key/generate', dependencies=[Depends(check_admin_auth)])
+async def generate_proxy_key():
+    svc = get_service()
+    return {'key': svc.generate_proxy_key()}
 
 
 @app.get('/api/provider-keys')
@@ -130,6 +212,13 @@ async def get_preferred_model():
         provider, model = current.split('/', 1)
         return {'ok': True, 'provider': provider, 'model': model, 'requested_model': current}
     return {'ok': True, 'provider': None, 'model': None, 'requested_model': None}
+
+
+@app.get('/api/usage-stats', dependencies=[Depends(check_admin_auth)])
+async def get_usage_stats():
+    svc = get_service()
+    stats = await run_in_threadpool(svc.get_usage_stats)
+    return {'stats': stats}
 
 
 @app.post('/api/preferred-model')
@@ -152,7 +241,7 @@ async def save_preferred_model(request: Request):
 @app.get('/api/providers/{provider}/models/recommended')
 async def recommended_models(provider: str, model: str | None = None):
     svc = get_service()
-    items = svc.recommended_models(provider, requested_model=model)
+    items = await run_in_threadpool(svc.recommended_models, provider, model)
     return {'provider': provider, 'items': items}
 
 
@@ -181,7 +270,7 @@ async def list_providers():
 async def provider_models(provider: str):
     svc = get_service()
     try:
-        models = svc.list_models(provider)
+        models = await run_in_threadpool(svc.list_models, provider)
         return {'provider': provider, 'models': models}
     except ProviderError as exc:
         return JSONResponse({'ok': False, 'error': str(exc)}, status_code=400)
@@ -190,7 +279,7 @@ async def provider_models(provider: str):
 @app.post('/api/provider-keys/{provider}/verify')
 async def verify_provider_key(provider: str):
     svc = get_service()
-    result = svc.verify_provider_key(provider)
+    result = await run_in_threadpool(svc.verify_provider_key, provider)
     return JSONResponse(result, status_code=200 if result.get('ok') else 400)
 
 
@@ -261,7 +350,7 @@ async def save_provider_key(provider: str, request: Request):
         return JSONResponse({'ok': False, 'error': 'missing api_key'}, status_code=400)
     svc = get_service()
     try:
-        result = svc.save_provider_key(provider, api_key)
+        result = svc.configure_provider_key(provider, api_key)
         return result
     except ProviderError as exc:
         return JSONResponse({'ok': False, 'error': str(exc)}, status_code=400)
@@ -277,7 +366,7 @@ async def probe_provider(provider: str, request: Request):
         return JSONResponse({'ok': False, 'error': 'missing model'}, status_code=400)
     svc = get_service()
     try:
-        result = svc.probe(provider, model)
+        result = await run_in_threadpool(svc.probe, provider, model)
         if _debug_enabled:
             _debug_log(
                 'probe_result',
@@ -301,7 +390,7 @@ async def probe_provider(provider: str, request: Request):
         return JSONResponse({'ok': False, 'error': str(exc)}, status_code=500)
 
 
-@app.post('/chat/completions')
+@app.post('/chat/completions', dependencies=[Depends(check_admin_auth)])
 async def legacy_chat_completions(request: Request):
     payload, error_response = await _read_json_payload(request)
     if error_response is not None:
@@ -321,7 +410,7 @@ async def legacy_chat_completions(request: Request):
         )
     if stream:
         try:
-            result = svc.forward_direct_chat(provider, model, payload)
+            result = await run_in_threadpool(svc.forward_direct_chat, provider, model, payload)
             if _debug_enabled:
                 _debug_log(
                     'chat_completions_result',
@@ -402,7 +491,7 @@ async def legacy_chat_completions(request: Request):
                 )
             return JSONResponse({'ok': False, 'provider': provider, 'model': model, 'error': str(exc)}, status_code=500)
     prompt = _extract_prompt_from_payload(payload)
-    result = svc.chat(provider, model, prompt)
+    result = await run_in_threadpool(svc.chat, provider, model, prompt)
     if result.ok:
         return {'ok': True, 'provider': provider, 'model': model, 'actual_model': result.actual_model or model, 'content': result.content}
     return JSONResponse({
@@ -416,7 +505,7 @@ async def legacy_chat_completions(request: Request):
     }, status_code=400)
 
 
-@app.post('/v1/chat/completions')
+@app.post('/v1/chat/completions', dependencies=[Depends(check_auth)])
 async def openai_chat_completions(request: Request):
     payload, error_response = await _read_json_payload(request, openai=True)
     if error_response is not None:
@@ -436,7 +525,7 @@ async def openai_chat_completions(request: Request):
             status_code=400,
         )
 
-    result = relay.handle_chat(req)
+    result = await run_in_threadpool(relay.handle_chat, req)
 
     if result.stream_chunks is not None:
         return StreamingResponse(
@@ -450,8 +539,12 @@ async def openai_chat_completions(request: Request):
 
 
 def _iter_chunks(chunks):
-    for chunk in chunks:
-        yield chunk
+    try:
+        for chunk in chunks:
+            yield chunk
+    finally:
+        if hasattr(chunks, 'close'):
+            chunks.close()
 
 
 def _extract_prompt_from_payload(payload: dict) -> str:

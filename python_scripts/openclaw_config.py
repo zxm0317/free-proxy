@@ -108,12 +108,12 @@ def _normalize_legacy_names(config: dict[str, Any]) -> None:
         ]
 
 
-def _ensure_free_proxy_provider(config: dict[str, Any], port: int) -> None:
+def _ensure_free_proxy_provider(config: dict[str, Any], port: int, proxy_api_key: str) -> None:
     with_root = _ensure_root(config)
     providers = with_root['models']['providers']
     providers[FREE_PROXY_PROVIDER_ID] = {
         'baseUrl': f'http://localhost:{port}/v1',
-        'apiKey': 'any_string',
+        'apiKey': proxy_api_key,
         'api': 'openai-completions',
         'models': [
             {'id': FREE_PROXY_MODEL_ID, 'name': FREE_PROXY_MODEL_ID},
@@ -182,7 +182,7 @@ def detect_openclaw_config() -> dict[str, Any]:
     return result
 
 
-def configure_openclaw_model(mode: str, *, port: int) -> dict[str, Any]:
+def configure_openclaw_model(mode: str, *, port: int, proxy_api_key: str) -> dict[str, Any]:
     if mode not in {'default', 'fallback'}:
         return {'success': False, 'error': 'Invalid mode'}
 
@@ -206,7 +206,7 @@ def configure_openclaw_model(mode: str, *, port: int) -> dict[str, Any]:
 
     new_config = json.loads(json.dumps(existing))
     _normalize_legacy_names(new_config)
-    _ensure_free_proxy_provider(new_config, port)
+    _ensure_free_proxy_provider(new_config, port, proxy_api_key)
     _ensure_agent_allowlist(new_config)
     if mode == 'default':
         _apply_default_mode(new_config)

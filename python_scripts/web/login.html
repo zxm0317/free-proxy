@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>登录控制台 - free-proxy</title>
+    <style>
+        :root {
+            --primary: #2b7a58;
+            --primary-hover: #1f5c42;
+            --bg: #f2f5ef;
+            --card-bg: #ffffff;
+            --text: #222;
+            --muted: #666;
+            --error: #e03131;
+            --border: #ddd;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            margin: 0;
+            padding: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+        }
+
+        .login-box {
+            background: var(--card-bg);
+            padding: 32px;
+            border-radius: 16px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.08);
+            width: 320px;
+            text-align: center;
+        }
+
+        .login-box h2 {
+            margin: 0 0 8px;
+            font-size: 24px;
+        }
+
+        .login-box .subtle {
+            color: var(--muted);
+            font-size: 13px;
+            margin: 0 0 24px;
+        }
+
+        .input {
+            width: 100%;
+            box-sizing: border-box;
+            text-align: center;
+            font-size: 16px;
+            padding: 12px;
+            margin-bottom: 16px;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            outline: none;
+        }
+
+        .input:focus {
+            border-color: var(--primary);
+            box-shadow: 0 0 0 2px rgba(43, 122, 88, 0.2);
+        }
+
+        .btn {
+            appearance: none;
+            border: none;
+            background: var(--primary);
+            color: white;
+            font-size: 15px;
+            font-weight: 600;
+            padding: 12px;
+            border-radius: 6px;
+            cursor: pointer;
+            width: 100%;
+            transition: background 0.1s;
+        }
+
+        .btn:hover {
+            background: var(--primary-hover);
+        }
+
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .error-msg {
+            color: var(--error);
+            font-size: 13px;
+            margin-top: 12px;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="login-box">
+        <h2>控制台登录</h2>
+        <p class="subtle">默认密码已在后台服务启动时打印至终端</p>
+        <input type="password" id="admin-password" placeholder="请输入密码" class="input" autofocus>
+        <button id="btn-login" class="btn">进入控制台</button>
+        <div id="login-error" class="error-msg">密码错误</div>
+    </div>
+
+    <script>
+        document.getElementById('btn-login').addEventListener('click', attemptLogin);
+        document.getElementById('admin-password').addEventListener('keyup', (e) => {
+            if (e.key === 'Enter') attemptLogin();
+        });
+
+        async function attemptLogin() {
+            const pwd = document.getElementById('admin-password').value.trim();
+            const errEl = document.getElementById('login-error');
+            const btn = document.getElementById('btn-login');
+            
+            if (!pwd) return;
+            
+            btn.disabled = true;
+            btn.textContent = '验证中...';
+            errEl.style.display = 'none';
+            
+            try {
+                const response = await fetch('/api/auth/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ password: pwd })
+                });
+
+                let data = {};
+                try {
+                    data = await response.json();
+                } catch {
+                    // Ignore
+                }
+
+                if (response.ok && data.ok) {
+                    window.location.href = '/';
+                } else {
+                    throw new Error(data.error || '密码错误');
+                }
+            } catch (error) {
+                errEl.style.display = 'block';
+                errEl.textContent = error.message;
+            } finally {
+                btn.disabled = false;
+                btn.textContent = '进入控制台';
+            }
+        }
+    </script>
+</body>
+</html>

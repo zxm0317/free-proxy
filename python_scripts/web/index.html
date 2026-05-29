@@ -598,7 +598,10 @@
                     <h1>free-proxy 控制台</h1>
                     <p>先配置 provider，再选择推荐模型，最后直接验证真实调用结果。</p>
                 </div>
-                <button class="btn btn-accent" id="reloadPageBtn">刷新状态</button>
+                <div style="display: flex; gap: 8px;">
+                    <button class="btn btn-accent" id="reloadPageBtn">刷新状态</button>
+                    <button class="btn btn-secondary" onclick="logout()">退出登录</button>
+                </div>
             </div>
             <div class="hero-copy">
                 <div class="hero-chip">1. 保存并验证 provider key</div>
@@ -608,6 +611,20 @@
         </section>
 
         <div class="page-flow">
+            <section class="card" style="margin-bottom: 24px;">
+                <div class="card-head">
+                    <div>
+                        <h2>0. Proxy API Key (代理服务凭证)</h2>
+                        <div class="subtle">这是您调用 free-proxy 服务必须使用的鉴权凭证。OpenClaw 和 Opencode 等客户端接入时均需提供此 Key。</div>
+                    </div>
+                    <button class="btn btn-primary" onclick="generateProxyKey()">生成 / 重置 Key</button>
+                </div>
+                <div style="display: flex; gap: 12px; align-items: center; margin-top: 12px;">
+                    <input type="text" class="field" id="proxyKeyDisplay" readonly placeholder="未生成" style="flex: 1; font-family: monospace; font-size: 14px; background: #fafafa;">
+                    <button class="btn btn-secondary" onclick="copyProxyKey()">复制</button>
+                </div>
+            </section>
+
             <section class="card">
                 <div class="card-head">
                     <div>
@@ -659,22 +676,34 @@
                 </div>
             </section>
 
-            <section class="card" id="openClawSection">
+            <section class="card" id="statsSection">
                 <div class="card-head">
                     <div>
-                        <h2>5. OpenClaw 配置</h2>
-                        <div class="subtle">和 TS 版一致：支持检测、设为默认模型、加入备用链、查看与恢复备份。</div>
+                        <h2>4. 调用统计 (Model Usage Stats)</h2>
+                        <div class="subtle">按 Provider 和模型维度的调用次数统计。</div>
                     </div>
+                    <button class="btn btn-secondary" onclick="fetchUsageStats()">刷新统计</button>
                 </div>
-                <div id="openClawStatus" class="result-box status-info">正在检测 OpenClaw 配置...</div>
-                <div id="openClawActions" class="toolbar" style="margin-top: 12px;"></div>
-                <div id="backupSection" style="margin-top: 12px;"></div>
+                <div class="table-container" style="margin-top: 12px; overflow-x: auto;">
+                    <table style="width: 100%; border-collapse: collapse; text-align: left; background: #fff; border: 1px solid var(--line); border-radius: 8px;">
+                        <thead>
+                            <tr style="border-bottom: 1px solid var(--line); background: #f9f9f9;">
+                                <th style="padding: 12px; font-weight: 600;">Provider</th>
+                                <th style="padding: 12px; font-weight: 600;">模型 (Model)</th>
+                                <th style="padding: 12px; font-weight: 600;">调用次数 (Usage)</th>
+                            </tr>
+                        </thead>
+                        <tbody id="usageStatsBody">
+                            <tr><td colspan="3" style="padding: 12px; text-align: center; color: var(--muted);">正在加载统计数据...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
             </section>
 
             <section class="card">
                 <div class="card-head">
                     <div>
-                        <h2>6. 接入说明</h2>
+                        <h2>5. 接入说明</h2>
                         <div class="subtle">以下示例与当前真实实现一致，只保留稳定别名 `free-proxy/auto`。</div>
                     </div>
                 </div>
@@ -717,13 +746,10 @@ opencode run -m free-proxy/auto "Reply with exactly OK"</pre>
         const PROVIDERS = [
             { id: 'openrouter', name: 'OpenRouter', tier: '免费', tierClass: 'free', placeholder: 'openrouter key', keyUrl: 'https://openrouter.ai/keys' },
             { id: 'groq', name: 'Groq', tier: '免费', tierClass: 'free', placeholder: 'groq key', keyUrl: 'https://console.groq.com/keys' },
-            { id: 'longcat', name: 'Longcat', tier: '免费', tierClass: 'free', placeholder: 'lc-...', keyUrl: 'https://longcat.chat/platform/api-keys' },
-            { id: 'ofox', name: 'Ofox', tier: '免费', tierClass: 'free', placeholder: 'sk-of-...', keyUrl: 'https://ofox.ai/zh/models/z-ai/glm-4.7-flash%3Afree' },
             { id: 'gemini', name: 'Gemini', tier: '免费', tierClass: 'free', placeholder: 'gemini key', keyUrl: 'https://aistudio.google.com/app/apikey' },
             { id: 'github', name: 'GitHub Models', tier: '免费', tierClass: 'free', placeholder: 'github token', keyUrl: 'https://github.com/settings/tokens' },
             { id: 'mistral', name: 'Mistral', tier: '免费', tierClass: 'free', placeholder: 'mist-...', keyUrl: 'https://console.mistral.ai/api-keys' },
             { id: 'sambanova', name: 'SambaNova', tier: '免费', tierClass: 'free', placeholder: 'sn-...', keyUrl: 'https://cloud.sambanova.ai/' },
-            { id: 'nvidia', name: 'NVIDIA NIM', tier: '免费', tierClass: 'free', placeholder: 'nvapi-...', keyUrl: 'https://build.nvidia.com/' },
         ];
 
         const state = {
@@ -747,9 +773,6 @@ opencode run -m free-proxy/auto "Reply with exactly OK"</pre>
         const chatModel = document.getElementById('chatModel');
         const chatPrompt = document.getElementById('chatPrompt');
         const modelSuggestions = document.getElementById('modelSuggestions');
-        const openClawStatus = document.getElementById('openClawStatus');
-        const openClawActions = document.getElementById('openClawActions');
-        const backupSection = document.getElementById('backupSection');
 
         function showToast(message, type = 'success') {
             toast.textContent = message;
@@ -779,8 +802,39 @@ opencode run -m free-proxy/auto "Reply with exactly OK"</pre>
             localStorage.setItem('py-ui-selected-model', state.selectedModel || '');
         }
 
+        async function logout() {
+            try {
+                await fetch('/api/auth/logout', { method: 'POST' });
+            } catch (e) {}
+            window.location.href = '/login';
+        }
+
+        async function checkInitialAuth() {
+            try {
+                await loadStatuses();
+                return true;
+            } catch (e) {
+                console.error('Error in checkInitialAuth:', e);
+                return false;
+            }
+        }
+
+        async function startApp() {
+            const isValid = await checkInitialAuth();
+            if (!isValid) {
+                window.location.href = '/login';
+                return;
+            }
+            await bootstrap(false);
+        }
+
         async function requestJson(url, options = {}) {
             const response = await fetch(url, options);
+            
+            if (response.status === 401) {
+                logout();
+            }
+            
             let data = {};
             try {
                 data = await response.json();
@@ -851,6 +905,11 @@ opencode run -m free-proxy/auto "Reply with exactly OK"</pre>
 
         async function requestStream(url, options = {}, onChunk) {
             const response = await fetch(url, options);
+            
+            if (response.status === 401) {
+                logout();
+                throw new Error('鉴权失败，请重新登录');
+            }
             const contentType = response.headers.get('content-type') || '';
             if (!response.ok) {
                 let data = {};
@@ -1155,6 +1214,49 @@ opencode run -m free-proxy/auto "Reply with exactly OK"</pre>
             modelSuggestions.innerHTML = items.map((item) => `<option value="${escapeHtml(item.id)}"></option>`).join('');
         }
 
+        async function loadProxyKey() {
+            try {
+                const data = await requestJson('/api/proxy-key');
+                const display = document.getElementById('proxyKeyDisplay');
+                if (data && data.key) {
+                    display.value = data.key;
+                    display.dataset.key = data.key;
+                } else {
+                    display.value = '';
+                    display.dataset.key = '';
+                }
+            } catch (error) {
+                console.error('Failed to load proxy key', error);
+            }
+        }
+
+        async function generateProxyKey() {
+            try {
+                const data = await requestJson('/api/proxy-key/generate', { method: 'POST' });
+                const display = document.getElementById('proxyKeyDisplay');
+                if (data && data.key) {
+                    display.value = data.key;
+                    display.dataset.key = data.key;
+                    showToast('Proxy API Key 已重新生成', 'success');
+                }
+            } catch (error) {
+                showToast(error.message || '生成失败', 'error');
+            }
+        }
+
+        function copyProxyKey() {
+            const display = document.getElementById('proxyKeyDisplay');
+            if (!display.value) {
+                showToast('尚未生成 Key', 'error');
+                return;
+            }
+            navigator.clipboard.writeText(display.value).then(() => {
+                showToast('已复制到剪贴板', 'success');
+            }).catch(() => {
+                showToast('复制失败', 'error');
+            });
+        }
+
         async function loadStatuses() {
             state.statuses = await requestJson('/api/provider-keys');
             renderProviderCards();
@@ -1360,122 +1462,6 @@ opencode run -m free-proxy/auto "Reply with exactly OK"</pre>
             }
         }
 
-        async function checkOpenClawStatus() {
-            try {
-                const data = await requestJson('/api/detect-openclaw');
-                if (data.exists && data.isValid) {
-                    openClawStatus.className = 'result-box status-success';
-                    openClawStatus.textContent = `已检测到 OpenClaw 配置\n路径: ${data.path}`;
-                    openClawActions.innerHTML = `
-                        <button class="btn btn-primary" data-oc-action="configure" data-mode="default">设为 OpenClaw 默认模型</button>
-                        <button class="btn btn-secondary" data-oc-action="configure" data-mode="fallback">加入 OpenClaw 备用模型</button>
-                    `;
-                } else if (data.exists && !data.isValid) {
-                    openClawStatus.className = 'result-box status-error';
-                    openClawStatus.textContent = `检测到 OpenClaw 配置文件，但 JSON 格式不正确\n路径: ${data.path}`;
-                    openClawActions.innerHTML = '';
-                } else {
-                    openClawStatus.className = 'result-box status-info';
-                    openClawStatus.textContent = '未检测到 OpenClaw 配置文件。';
-                    openClawActions.innerHTML = `
-                        <button class="btn btn-primary" data-oc-action="configure" data-mode="default">创建并设为默认模型</button>
-                        <button class="btn btn-secondary" data-oc-action="configure" data-mode="fallback">创建并加入备用模型</button>
-                    `;
-                }
-                await loadBackups();
-            } catch (error) {
-                openClawStatus.className = 'result-box status-error';
-                openClawStatus.textContent = `检测 OpenClaw 失败: ${error.message || '未知错误'}`;
-                openClawActions.innerHTML = '';
-            }
-        }
-
-        async function configureOpenClaw(mode, button) {
-            button.disabled = true;
-            const label = button.textContent;
-            button.textContent = '配置中...';
-            try {
-                const data = await requestJson('/api/configure-openclaw', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ mode }),
-                });
-                showToast(data.message || 'OpenClaw 配置成功');
-                setDiagnostics('status-success', [
-                    'OpenClaw 配置成功',
-                    mode === 'default' ? '模式: 默认模型' : '模式: 备用模型',
-                    data.backup ? `备份: ${data.backup}` : '备份: 首次创建，无旧配置可备份',
-                ]);
-                await checkOpenClawStatus();
-            } catch (error) {
-                const payload = error.payload || {};
-                showToast(payload.error || error.message || '配置失败', 'error');
-                setDiagnostics('status-error', [
-                    'OpenClaw 配置失败',
-                    `错误: ${payload.error || error.message || '未知错误'}`,
-                ]);
-            } finally {
-                button.disabled = false;
-                button.textContent = label;
-            }
-        }
-
-        async function loadBackups() {
-            try {
-                const data = await requestJson('/api/backups');
-                const backups = Array.isArray(data.backups) ? data.backups : [];
-                if (!backups.length) {
-                    backupSection.innerHTML = '<div class="panel-note">暂无 OpenClaw 备份文件。</div>';
-                    return;
-                }
-
-                backupSection.innerHTML = `
-                    <div class="panel-note" style="margin-bottom: 8px;">最近备份（最多展示 5 条）</div>
-                    ${backups.slice(0, 5).map((name) => `
-                        <div class="model-item" style="padding: 10px 12px; margin-bottom: 8px;">
-                            <div class="model-meta">
-                                <div class="model-name mono">${escapeHtml(name)}</div>
-                            </div>
-                            <div class="model-actions">
-                                <button class="btn btn-ghost" data-oc-action="restore" data-backup="${escapeHtml(name)}">恢复</button>
-                            </div>
-                        </div>
-                    `).join('')}
-                `;
-            } catch (error) {
-                backupSection.innerHTML = `<div class="result-box status-error">加载备份失败: ${escapeHtml(error.message || '未知错误')}</div>`;
-            }
-        }
-
-        async function restoreBackup(backupName, button) {
-            button.disabled = true;
-            const label = button.textContent;
-            button.textContent = '恢复中...';
-            try {
-                await requestJson('/api/restore-backup', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ backup: backupName }),
-                });
-                showToast(`已恢复备份: ${backupName}`);
-                setDiagnostics('status-success', [
-                    'OpenClaw 备份恢复成功',
-                    `备份文件: ${backupName}`,
-                ]);
-                await checkOpenClawStatus();
-            } catch (error) {
-                const payload = error.payload || {};
-                showToast(payload.error || error.message || '恢复失败', 'error');
-                setDiagnostics('status-error', [
-                    'OpenClaw 备份恢复失败',
-                    `错误: ${payload.error || error.message || '未知错误'}`,
-                ]);
-            } finally {
-                button.disabled = false;
-                button.textContent = label;
-            }
-        }
-
         providerGrid.addEventListener('click', async (event) => {
             const button = event.target.closest('button[data-action]');
             if (!button) {
@@ -1573,34 +1559,12 @@ opencode run -m free-proxy/auto "Reply with exactly OK"</pre>
             showToast('状态已刷新', 'info');
         });
 
-        openClawActions.addEventListener('click', async (event) => {
-            const button = event.target.closest('button[data-oc-action]');
-            if (!button) {
-                return;
-            }
-            const action = button.dataset.ocAction;
-            if (action === 'configure') {
-                await configureOpenClaw(button.dataset.mode, button);
-            }
-        });
-
-        backupSection.addEventListener('click', async (event) => {
-            const button = event.target.closest('button[data-oc-action="restore"]');
-            if (!button) {
-                return;
-            }
-            const backup = button.dataset.backup || '';
-            if (!backup) {
-                return;
-            }
-            await restoreBackup(backup, button);
-        });
-
         async function bootstrap(forceModels = false) {
+            await loadProxyKey();
             await loadStatuses();
             await loadPreferredModel();
             await ensureVisibleModels(forceModels);
-            await checkOpenClawStatus();
+            await fetchUsageStats();
             setDiagnostics('status-info', [
                 '动作: 页面初始化',
                 `结果: 已加载 ${configuredProviders().length} 个已配置 provider`,
@@ -1608,7 +1572,32 @@ opencode run -m free-proxy/auto "Reply with exactly OK"</pre>
             ]);
         }
 
-        bootstrap(true).catch((error) => {
+        async function fetchUsageStats() {
+            const tbody = document.getElementById('usageStatsBody');
+            try {
+                const response = await fetch('/api/usage-stats');
+                if (response.status === 401) {
+                    showToast('未登录或凭证无效，请重新登录', 'error');
+                    window.location.href = '/login';
+                    return;
+                }
+                const data = await response.json();
+                if (!data || !data.stats || data.stats.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="3" style="padding: 12px; text-align: center; color: var(--muted);">暂无模型调用数据</td></tr>';
+                    return;
+                }
+                let html = '';
+                for (const row of data.stats) {
+                    html += `<tr style="border-bottom: 1px solid var(--line);"><td style="padding: 12px; font-weight: 600; color: var(--primary);">${escapeHtml(row.provider)}</td><td style="padding: 12px; font-family: monospace;">${escapeHtml(row.model)}</td><td style="padding: 12px;">${escapeHtml(String(row.usage_count))}</td></tr>`;
+                }
+                tbody.innerHTML = html;
+            } catch (error) {
+                console.error(error);
+                tbody.innerHTML = '<tr><td colspan="3" style="padding: 12px; text-align: center; color: var(--danger);">加载失败</td></tr>';
+            }
+        }
+
+        startApp().catch((error) => {
             setDiagnostics('status-error', [
                 '页面初始化失败',
                 error.message || '未知错误',

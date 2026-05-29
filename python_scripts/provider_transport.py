@@ -48,6 +48,18 @@ def build_url(base_url: str, path: str, query: dict[str, str] | None = None) -> 
 
 class HttpxTransport:
     _retryable_statuses = {429, 500, 502, 503, 504}
+    _shared_client: httpx.Client | None = None
+
+    @classmethod
+    def _get_client(cls) -> httpx.Client:
+        if cls._shared_client is None:
+            verify = cls._verify_value()
+            limits = httpx.Limits(max_keepalive_connections=50, max_connections=100)
+            if isinstance(verify, ssl.SSLContext):
+                cls._shared_client = httpx.Client(verify=verify, follow_redirects=True, limits=limits)
+            else:
+                cls._shared_client = httpx.Client(verify=True, follow_redirects=True, limits=limits)
+        return cls._shared_client
 
     @staticmethod
     def _headers_map(headers: httpx.Headers) -> dict[str, str]:
@@ -79,12 +91,7 @@ class HttpxTransport:
     def _is_retryable_status(cls, status: int) -> bool:
         return status in cls._retryable_statuses
 
-    @retry(
-        retry=retry_if_exception_type(ProviderError),
-        stop=stop_after_attempt(3),
-        wait=wait_exponential(multiplier=1, min=0.5, max=8) + wait_random(0, 0.5),
-        reraise=True,
-    )
+
     def request(
         self,
         method: str,
@@ -107,24 +114,20 @@ class HttpxTransport:
             except (HTTPError, URLError, TimeoutError, OSError) as exc:
                 raise ProviderError(f'网络连接失败: {exc}') from exc
 
-        with httpx.Client(verify=verify, timeout=timeout, follow_redirects=True) as client:
-            try:
-                response = client.request(method, url, headers=headers or {}, content=body)
-            except httpx.RequestError as exc:
-                raise ProviderError(f'网络连接失败: {exc}') from exc
-            response_headers = self._headers_map(response.headers)
-            response_body = response.content
-            if self._is_retryable_status(response.status_code):
-                failure = classify_error(response.status_code, self._response_text(response_body))
-                raise ProviderHTTPError(message=failure.message, status=response.status_code, category=failure.category)
-            return response.status_code, response_headers, response_body
+        client = self._get_client()
+        httpx_timeout = httpx.Timeout(connect=min(timeout, 15), read=max(timeout, 300), write=min(timeout, 15), pool=5)
+        try:
+            response = client.request(method, url, headers=headers or {}, content=body, timeout=httpx_timeout)
+        except httpx.RequestError as exc:
+            raise ProviderError(f'网络连接失败: {exc}') from exc
+        response_headers = self._headers_map(response.headers)
+        response_body = response.content
+        if self._is_retryable_status(response.status_code):
+            failure = classify_error(response.status_code, self._response_text(response_body))
+            raise ProviderHTTPError(message=failure.message, status=response.status_code, category=failure.category)
+        return response.status_code, response_headers, response_body
 
-    @retry(
-        retry=retry_if_exception_type(ProviderError),
-        stop=stop_after_attempt(3),
-        wait=wait_exponential(multiplier=1, min=0.5, max=8) + wait_random(0, 0.5),
-        reraise=True,
-    )
+
     def stream_request(
         self,
         method: str,
@@ -149,26 +152,23 @@ class HttpxTransport:
             return status, response_headers, [response_body]
 
         httpx_timeout = httpx.Timeout(connect=min(timeout, 15), read=max(timeout, 300), write=min(timeout, 15), pool=5)
-        client = httpx.Client(verify=verify, timeout=httpx_timeout, follow_redirects=True)
-        request = client.build_request(method, url, headers=headers or {}, content=body)
+        client = self._get_client()
+        request = client.build_request(method, url, headers=headers or {}, content=body, timeout=httpx_timeout)
         try:
             response = client.send(request, stream=True)
         except httpx.RequestError as exc:
-            client.close()
             raise ProviderError(f'网络连接失败: {exc}') from exc
         response_headers = self._headers_map(response.headers)
 
         if self._is_retryable_status(response.status_code):
             response_body = response.read()
             response.close()
-            client.close()
             failure = classify_error(response.status_code, self._response_text(response_body))
             raise ProviderHTTPError(message=failure.message, status=response.status_code, category=failure.category)
 
         if response.status_code >= 400:
             response_body = response.read()
             response.close()
-            client.close()
             return response.status_code, response_headers, [response_body]
 
         def iterator() -> Iterable[bytes]:
@@ -197,7 +197,6 @@ class HttpxTransport:
                     yield bytes(pending)
             finally:
                 response.close()
-                client.close()
 
         return response.status_code, response_headers, iterator()
 

@@ -54,7 +54,7 @@ def detect_opencode_config() -> dict[str, Any]:
     return result
 
 
-def configure_opencode_provider(*, port: int) -> dict[str, Any]:
+def configure_opencode_provider(*, port: int, proxy_api_key: str) -> dict[str, Any]:
     status = detect_opencode_config()
     path = _opencode_config_path()
     root = _opencode_dir()
@@ -95,7 +95,7 @@ def configure_opencode_provider(*, port: int) -> dict[str, Any]:
         'name': FREE_PROXY_PROVIDER_ID,
         'options': {
             'baseURL': f'http://127.0.0.1:{port}/v1',
-            'apiKey': 'sk-not-needed',
+            'apiKey': proxy_api_key,
         },
         'models': {
             'auto': {'name': 'auto'},

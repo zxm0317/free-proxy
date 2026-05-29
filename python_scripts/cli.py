@@ -11,6 +11,7 @@ if __package__ in (None, ''):
 
 from python_scripts.server_fastapi import app as fastapi_app
 from python_scripts.service import ProxyService
+from python_scripts.config import settings
 import uvicorn
 
 
@@ -45,8 +46,8 @@ def main(argv: list[str] | None = None) -> int:
         set_debug(debug)
         uvicorn.run(
             'python_scripts.server_fastapi:app',
-            host='127.0.0.1',
-            port=8765,
+            host=settings.host,
+            port=settings.port,
             log_level=log_level,
         )
         return 0

@@ -36,6 +36,8 @@ class OpenAIRelay:
         preferred_model_loader=None,
         health_ttl_seconds: int,
         configured_providers_loader=configured_provider_names,
+        debug_log=None,
+        usage_incrementer=None,
     ) -> None:
         self.adapter_factory = adapter_factory
         self.health_loader = health_loader
@@ -43,6 +45,8 @@ class OpenAIRelay:
         self.preferred_model_loader = preferred_model_loader
         self.health_ttl_seconds = health_ttl_seconds
         self.configured_providers_loader = configured_providers_loader
+        self.debug_log = debug_log
+        self.usage_incrementer = usage_incrementer
 
     def normalize(self, payload: dict[str, object]) -> ChatRequest:
         return normalize_chat_request(payload)
@@ -159,8 +163,10 @@ class OpenAIRelay:
     def _payload_for_candidate(self, provider: str, model: str, request: ChatRequest) -> dict[str, object]:
         payload = dict(request.raw_payload)
         payload.pop('requested_model', None)
+        payload.pop('client_hint', None)
+        payload.pop('provider', None)
         payload['model'] = model
-        payload['stream'] = False
+        payload['stream'] = request.stream
         payload['messages'] = self._trim_messages_for_provider(provider, request.messages)
         default_output = model_default_output_tokens(provider, model, response_token_budget(provider))
         requested_output = request.max_output_tokens if isinstance(request.max_output_tokens, int) and request.max_output_tokens > 0 else default_output
@@ -170,6 +176,8 @@ class OpenAIRelay:
     def _adapter_response(self, provider: str, model: str, request: ChatRequest):
         adapter = self.adapter_factory(provider)
         payload = self._payload_for_candidate(provider, model, request)
+        if self.debug_log:
+            self.debug_log('upstream_payload_debug', provider=provider, payload=json.dumps(payload, ensure_ascii=False))
         adapter_response = adapter.forward_chat(payload)
         if get_provider(provider).format == 'gemini' and adapter_response.status < 400 and adapter_response.body is not None:
             body = adapter_response.body or b''
@@ -261,6 +269,7 @@ class OpenAIRelay:
         return ''
 
     def handle_chat(self, request: ChatRequest) -> RelayResponse:
+        overall_start = time.time()
         preferred_model = ''
         if callable(self.preferred_model_loader):
             preferred_model = str(self.preferred_model_loader() or '').strip()
@@ -279,9 +288,12 @@ class OpenAIRelay:
         current_provider = ''
         listed_loaded: set[str] = set()
         index = 0
+        route_build_ms = int((time.time() - overall_start) * 1000)
+        
         while index < len(candidates):
             candidate = candidates[index]
             index += 1
+            start_time = time.time()
             if candidate.provider == current_provider:
                 same_provider_attempts += 1
             else:
@@ -292,21 +304,84 @@ class OpenAIRelay:
             except ProviderError as exc:
                 failure = classify_error(0, str(exc))
                 self._record_health(candidate.provider, candidate.model, False, failure.category)
+                if candidate.provider not in listed_loaded:
+                    listed_loaded.add(candidate.provider)
+                    candidates = self._append_provider_listed_candidate(candidates, candidate.provider, index)
                 decision = decide_next_action(FallbackContext(index, same_provider_attempts), RelayAttemptResult(False, candidate.provider, candidate.model, failure.category, None, None, str(exc)))
                 if decision.action == 'stop':
                     break
                 continue
             if adapter_response.status < 400:
                 self._record_health(candidate.provider, candidate.model, True, None)
+                if self.usage_incrementer:
+                    import threading
+                    threading.Thread(target=self.usage_incrementer, args=(candidate.provider, candidate.model), daemon=True).start()
+                
+                if adapter_response.stream is not None:
+                    headers_ms = int((time.time() - start_time) * 1000)
+                    def _timed_stream(stream, start_time_local, overall_start_local, headers_ms_local):
+                        first = True
+                        try:
+                            for chunk in stream:
+                                if first:
+                                    first_chunk_ms = int((time.time() - start_time_local) * 1000)
+                                    if self.debug_log:
+                                        self.debug_log('route_timing', candidate_order=index, winner=f"{candidate.provider}/{candidate.model}", stream_headers_ms=headers_ms_local, first_chunk_ms=first_chunk_ms, route_build_ms=route_build_ms)
+                                    first = False
+                                yield chunk
+                        finally:
+                            if hasattr(stream, 'close'):
+                                stream.close()
+                            if self.debug_log:
+                                total_ms = int((time.time() - overall_start_local) * 1000)
+                                self.debug_log('route_timing_total', total_ms=total_ms)
+                    return RelayResponse(
+                        status=adapter_response.status,
+                        headers={'Content-Type': 'text/event-stream; charset=utf-8'},
+                        body=None,
+                        stream_chunks=_timed_stream(adapter_response.stream, start_time, overall_start, headers_ms)
+                    )
+
                 if adapter_response.body is None:
                     return RelayResponse(200, {'Content-Type': 'application/json; charset=utf-8'}, b'', None)
-                return normalize_provider_response(
+                resp = normalize_provider_response(
                     provider=candidate.provider,
                     model=candidate.model,
                     body=adapter_response.body,
                     stream=request.stream,
                 )
-            failure = classify_error(adapter_response.status, (adapter_response.body or b'').decode('utf-8', errors='ignore'))
+                if resp.stream_chunks is not None:
+                    headers_ms = int((time.time() - start_time) * 1000)
+                    def _timed_stream_local(stream, start_time_local, overall_start_local, headers_ms_local):
+                        first = True
+                        try:
+                            for chunk in stream:
+                                if first:
+                                    first_chunk_ms = int((time.time() - start_time_local) * 1000)
+                                    if self.debug_log:
+                                        self.debug_log('route_timing', candidate_order=index, winner=f"{candidate.provider}/{candidate.model}", stream_headers_ms=headers_ms_local, first_chunk_ms=first_chunk_ms, route_build_ms=route_build_ms)
+                                    first = False
+                                yield chunk
+                        finally:
+                            if hasattr(stream, 'close'):
+                                stream.close()
+                            if self.debug_log:
+                                total_ms = int((time.time() - overall_start_local) * 1000)
+                                self.debug_log('route_timing_total', total_ms=total_ms)
+                    resp = RelayResponse(
+                        status=resp.status,
+                        headers=resp.headers,
+                        body=resp.body,
+                        stream_chunks=_timed_stream_local(resp.stream_chunks, start_time, overall_start, headers_ms)
+                    )
+                return resp
+                
+            body_bytes = adapter_response.body or b''
+            if not body_bytes and adapter_response.stream is not None:
+                body_bytes = b''.join(adapter_response.stream)
+            failure = classify_error(adapter_response.status, body_bytes.decode('utf-8', errors='ignore'))
+            if self.debug_log:
+                self.debug_log('upstream_error_details', provider=candidate.provider, model=candidate.model, status=adapter_response.status, raw_body=body_bytes.decode('utf-8', errors='ignore'))
             self._record_health(candidate.provider, candidate.model, False, failure.category)
             if candidate.provider not in listed_loaded:
                 listed_loaded.add(candidate.provider)

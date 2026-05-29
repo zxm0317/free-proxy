@@ -6,7 +6,6 @@ import json
 import time
 from dataclasses import dataclass
 
-from .tool_protocol import ToolProtocolResult, parse_provider_tool_protocol
 
 
 @dataclass(frozen=True)
@@ -17,63 +16,12 @@ class RelayResponse:
     stream_chunks: object | None
 
 
-_LONGCAT_TOOL_CALL_MARKERS = ('<longcat_tool_call>', '<longcat_arg_key>', '<longcat_arg_value>')
-_LONGCAT_ARG_PATTERN = re.compile(
-    r'<longcat_arg_key>(?P<key>.*?)</longcat_arg_key>\s*<longcat_arg_value>(?P<value>.*?)</longcat_arg_value>',
-    re.S,
-)
-
-
 def sanitize_model_text(text: str) -> str:
-    if not text or not any(marker in text for marker in _LONGCAT_TOOL_CALL_MARKERS):
-        return text
-
-    prefix = text.split('<longcat_arg_key>', 1)[0].split('<longcat_tool_call>', 1)[0].strip()
-    question_items: list[dict[str, str]] = []
-    for match in _LONGCAT_ARG_PATTERN.finditer(text):
-        raw_value = match.group('value').strip().rstrip(',')
-        if raw_value and not raw_value.startswith('['):
-            raw_value = f'[{raw_value}]'
-        try:
-            parsed = json.loads(raw_value) if raw_value else []
-        except json.JSONDecodeError:
-            continue
-        if isinstance(parsed, dict):
-            parsed = [parsed]
-        if not isinstance(parsed, list):
-            continue
-        for item in parsed:
-            if not isinstance(item, dict):
-                continue
-            question = item.get('question')
-            if not isinstance(question, str) or not question.strip():
-                continue
-            header = item.get('header')
-            question_items.append(
-                {
-                    'header': header.strip() if isinstance(header, str) and header.strip() else '',
-                    'question': question.strip(),
-                }
-            )
-
-    if question_items:
-        lines: list[str] = []
-        if prefix:
-            lines.append(prefix)
-            lines.append('')
-        for index, item in enumerate(question_items, start=1):
-            if item['header']:
-                lines.append(f'{index}. {item["header"]}：{item["question"]}')
-            else:
-                lines.append(f'{index}. {item["question"]}')
-        return '\n'.join(lines).strip()
-
-    cleaned = prefix or text
-    return cleaned.replace('question\n', '').replace('question', '').strip()
+    return text.strip() if text else text
 
 
-def _normalize_tool_calls(provider: str, content: str) -> ToolProtocolResult | None:
-    return parse_provider_tool_protocol(provider, content)
+def _normalize_tool_calls(provider: str, content: str) -> None:
+    return None
 
 
 def _sse_json_line(payload: dict[str, object] | str) -> bytes:

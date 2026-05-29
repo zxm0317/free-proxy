@@ -27,13 +27,13 @@ def decide_next_action(context: FallbackContext, attempt) -> FallbackDecision:
     if context.attempt_count >= context.max_total_attempts:
         return FallbackDecision('stop')
     if attempt.category == 'auth':
-        return FallbackDecision('stop')
+        return FallbackDecision('next_candidate')
     if attempt.category == 'token_limit':
         if context.same_provider_attempts < context.max_same_provider_attempts:
             return FallbackDecision('retry_same_provider')
         return FallbackDecision('next_candidate')
     if attempt.category == 'rate_limit':
         return FallbackDecision('next_candidate', 0.5 * (context.backoff_multiplier ** context.attempt_count))
-    if attempt.category in {'quota', 'model_not_found', 'network', 'server'}:
+    if attempt.category in {'quota', 'model_not_found', 'network', 'server', 'invalid_request_error', 'unknown'}:
         return FallbackDecision('next_candidate')
     return FallbackDecision('stop')

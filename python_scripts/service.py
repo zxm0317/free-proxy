@@ -2,13 +2,14 @@ from __future__ import annotations
 
 import json
 import os
+import secrets
 import time
 from dataclasses import dataclass
 from collections.abc import Callable, Iterable
 from pathlib import Path
 
 from .config import DOTENV_PATH, hydrate_env, load_dotenv
-from .env_store import upsert_env
+from .db_store import get_all_keys, get_key, init_db, upsert_key, increment_model_usage, get_model_usage_stats
 from .errors import classify_error, remediation_suggestion
 from .health_store import load_health, upsert_health
 from .openai_relay import OpenAIRelay
@@ -17,7 +18,7 @@ from .provider_adapter import ProviderAdapter
 from .provider_catalog import configured_provider_names, get_model_capabilities, get_provider, get_provider_model_hints, list_providers
 from .provider_errors import ProviderError, ProviderHTTPError
 from .provider_routing import AliasName, PUBLIC_MODEL_ALIASES, ResolvedModelRequest, choose_candidates, resolve_alias_candidates, resolve_model_request
-from .provider_transport import Transport
+from .provider_transport import Transport, UrlLibTransport
 from .request_limiter import RequestLimiterGate
 from .token_budgeting import resolve_token_budget, shrink_budget_after_limit_error
 from .token_limit_store import load_token_limits, upsert_token_limit
@@ -64,22 +65,39 @@ class OpenAIForwardResult:
 class ProxyService:
     def __init__(
         self,
-        *,
         transport: Transport | None = None,
-        health_path: Path | None = None,
-        preferred_model_path: Path | None = None,
+        health_path: str = '',
+        preferred_model_path: str = '',
         token_limit_path: Path | None = None,
-        health_ttl_seconds: int | None = None,
-        dotenv_path: Path | None = None,
+        health_ttl_seconds: int = 300,
+        dotenv_path: str = '',
         request_timeout_seconds: int = 12,
         outbound_rpm: int = 60,
         debug_log: Callable[..., None] | None = None,
     ) -> None:
         self.dotenv_path = dotenv_path or DOTENV_PATH
         hydrate_env(self.dotenv_path)
-        self.transport = transport
-        self.health_path = health_path
-        self.preferred_model_path = preferred_model_path
+        
+        self.db_url = os.environ.get('DATABASE_URL')
+        if not self.db_url:
+            raise ValueError("DATABASE_URL is not set in environment or .env file.")
+            
+        init_db(self.db_url)
+        
+        # Migrate existing keys from .env if they don't exist in the database
+        env_values = load_dotenv(self.dotenv_path)
+        db_values = get_all_keys(self.db_url)
+        
+        for key, value in env_values.items():
+            if key.endswith('_API_KEY') and key not in db_values:
+                upsert_key(self.db_url, key, value)
+                
+        # Ensure ADMIN_PASSWORD exists for web console
+        self._ensure_admin_password()
+        
+        self.transport = transport if transport is not None else UrlLibTransport()
+        self.health_path = Path(health_path) if health_path else None
+        self.preferred_model_path = Path(preferred_model_path) if preferred_model_path else None
         self.token_limit_path = token_limit_path
         self.health_ttl_seconds = health_ttl_seconds if health_ttl_seconds is not None else 600
         self.request_timeout_seconds = request_timeout_seconds
@@ -87,14 +105,14 @@ class ProxyService:
         self.debug_log = debug_log
 
     def available_providers(self) -> list[str]:
-        return configured_provider_names()
+        return configured_provider_names(get_all_keys(self.db_url))
 
     def public_models(self) -> list[dict[str, str]]:
         return [dict(item) for item in PUBLIC_MODEL_ALIASES]
 
     def provider_adapter(self, provider_name: str) -> ProviderAdapter:
         provider = get_provider(provider_name)
-        api_key = os.environ.get(provider.api_key_env, '').strip()
+        api_key = get_key(self.db_url, provider.api_key_env)
         if not api_key:
             raise ProviderError(f'{provider_name} 没有配置 API Key')
         return ProviderAdapter(
@@ -114,7 +132,12 @@ class ProxyService:
             preferred_model_loader=lambda: load_preferred_model(self.preferred_model_path),
             health_ttl_seconds=self.health_ttl_seconds,
             configured_providers_loader=self.available_providers,
+            debug_log=self.debug_log,
+            usage_incrementer=lambda provider, model: increment_model_usage(self.db_url, provider, model),
         )
+
+    def get_usage_stats(self) -> list[dict[str, object]]:
+        return get_model_usage_stats(self.db_url)
 
     def preferred_model(self) -> str | None:
         return load_preferred_model(self.preferred_model_path)
@@ -135,25 +158,46 @@ class ProxyService:
         return f'{value[:4]}***{value[-4:]}'
 
     def provider_key_statuses(self) -> dict[str, dict[str, object]]:
-        values = load_dotenv(self.dotenv_path)
+        db_keys = get_all_keys(self.db_url)
         statuses: dict[str, dict[str, object]] = {}
         for provider in list_providers():
-            value = str(values.get(provider.api_key_env, '')).strip()
+            value = str(db_keys.get(provider.api_key_env, '')).strip()
             statuses[provider.name] = {
                 'configured': bool(value),
                 'masked': self._mask_key(value) if value else '',
-                'env': provider.api_key_env,
+                'models': [m for m in get_provider_model_hints(provider.name) if m.startswith('free-proxy/')],
             }
         return statuses
 
-    def save_provider_key(self, provider_name: str, api_key: str) -> dict[str, object]:
+    def configure_provider_key(self, provider_name: str, api_key: str) -> dict[str, object]:
         provider = get_provider(provider_name)
         value = api_key.strip()
         if not value:
             raise ProviderError('api_key 不能为空')
-        upsert_env(self.dotenv_path, provider.api_key_env, value)
-        os.environ[provider.api_key_env] = value
+        upsert_key(self.db_url, provider.api_key_env, value)
         return {'ok': True, 'provider': provider_name, 'masked': self._mask_key(value)}
+
+    def get_proxy_key(self) -> str | None:
+        return get_key(self.db_url, 'PROXY_API_KEY')
+
+    def generate_proxy_key(self) -> str:
+        new_key = f'sk-fp-{secrets.token_hex(16)}'
+        upsert_key(self.db_url, 'PROXY_API_KEY', new_key)
+        return new_key
+
+    def _ensure_admin_password(self) -> None:
+        admin_pwd = get_key(self.db_url, 'ADMIN_PASSWORD')
+        if not admin_pwd:
+            admin_pwd = f'admin-{secrets.token_hex(6)}'
+            upsert_key(self.db_url, 'ADMIN_PASSWORD', admin_pwd)
+            print('\n' + '=' * 60)
+            print('Web 控制台管理员密码已生成！')
+            print(f'你的登录密码是: {admin_pwd}')
+            print('请务必妥善保管，你可以随时在数据库中重置它。')
+            print('=' * 60 + '\n')
+            
+    def get_admin_password(self) -> str:
+        return get_key(self.db_url, 'ADMIN_PASSWORD') or ''
 
     def verify_provider_key(self, provider_name: str) -> dict[str, object]:
         def diagnose(exc: ProviderError) -> tuple[str, int | None, str]:
@@ -175,7 +219,8 @@ class ProxyService:
             first_error = None
 
         candidates: list[str] = []
-        for model in models + get_provider_model_hints(provider_name):
+        # 优先使用静态推荐模型，确保快速探测成功，避免动态列表中混入不可用或慢速模型（如语音模型）
+        for model in get_provider_model_hints(provider_name) + models:
             if model and model not in candidates:
                 candidates.append(model)
 
