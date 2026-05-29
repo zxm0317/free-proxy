@@ -64,18 +64,27 @@ class PostgresAdapter(DBAdapter):
     def execute(self, query: str, params: tuple = ()) -> None:
         if self.is_psycopg2:
             query = query.replace("%s", "%s") # psycopg2 uses %s just like psycopg3
-        with self.conn.cursor() as cur:
+        cur = self.conn.cursor()
+        try:
             cur.execute(query, params)
+        finally:
+            cur.close()
             
     def fetchone(self, query: str, params: tuple = ()) -> tuple | None:
-        with self.conn.cursor() as cur:
+        cur = self.conn.cursor()
+        try:
             cur.execute(query, params)
             return cur.fetchone()
+        finally:
+            cur.close()
             
     def fetchall(self, query: str, params: tuple = ()) -> list[tuple]:
-        with self.conn.cursor() as cur:
+        cur = self.conn.cursor()
+        try:
             cur.execute(query, params)
             return cur.fetchall()
+        finally:
+            cur.close()
             
     def commit(self) -> None:
         self.conn.commit()
