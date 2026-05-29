@@ -7,14 +7,23 @@ import urllib.parse
 try:
     import psycopg
     has_psycopg3 = True
-except ImportError:
+except ImportError as e:
     has_psycopg3 = False
+    logger.error(f"psycopg3 import failed: {e}")
 
 try:
     import psycopg2
     has_psycopg2 = True
-except ImportError:
+except ImportError as e:
     has_psycopg2 = False
+    logger.error(f"psycopg2 import failed: {e}")
+
+try:
+    import pg8000.dbapi
+    has_pg8000 = True
+except ImportError as e:
+    has_pg8000 = False
+    logger.error(f"pg8000 import failed: {e}")
 
 logger = logging.getLogger(__name__)
 
@@ -37,8 +46,18 @@ class PostgresAdapter(DBAdapter):
         elif has_psycopg2:
             self.is_psycopg2 = True
             self.conn = psycopg2.connect(db_url)
+        elif has_pg8000:
+            self.is_psycopg2 = True # pg8000 also uses %s safely for dbapi
+            parsed = urllib.parse.urlparse(db_url)
+            self.conn = pg8000.dbapi.connect(
+                user=parsed.username,
+                password=parsed.password,
+                host=parsed.hostname,
+                port=parsed.port or 5432,
+                database=parsed.path.lstrip('/')
+            )
         else:
-            raise ImportError("Neither psycopg nor psycopg2 is installed. Cannot connect to Postgres.")
+            raise ImportError("No Postgres driver (psycopg, psycopg2, or pg8000) is installed. Cannot connect to Postgres.")
 
         
     def execute(self, query: str, params: tuple = ()) -> None:

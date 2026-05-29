@@ -72,3 +72,5 @@ websockets==16.0
     # via uvicorn
 psycopg==3.1.18
 psycopg2-binary==2.9.9
+pg8000==1.31.5
+scramp==1.4.8
