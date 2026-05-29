@@ -5,7 +5,8 @@ from copy import deepcopy
 from pathlib import Path
 
 
-DEFAULT_PREFERRED_MODEL_PATH = Path('data/preferred-model.json')
+from .config import DATA_DIR
+DEFAULT_PREFERRED_MODEL_PATH = DATA_DIR / 'preferred-model.json'
 PreferredModelState = dict[str, object]
 
 

@@ -11,7 +11,8 @@ from pathlib import Path
 from cachetools import TTLCache
 
 
-DEFAULT_HEALTH_PATH = Path('data/model-health.json')
+from .config import DATA_DIR
+DEFAULT_HEALTH_PATH = DATA_DIR / 'model-health.json'
 HealthState = dict[str, dict[str, object]]
 _HEALTH_CACHE: TTLCache[str, HealthState] = TTLCache(maxsize=8, ttl=30)
 _HEALTH_LOCK = threading.Lock()

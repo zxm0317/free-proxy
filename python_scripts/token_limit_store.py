@@ -8,7 +8,8 @@ from pathlib import Path
 from cachetools import TTLCache
 
 
-DEFAULT_TOKEN_LIMIT_PATH = Path('data/token-limits.json')
+from .config import DATA_DIR
+DEFAULT_TOKEN_LIMIT_PATH = DATA_DIR / 'token-limits.json'
 
 TokenLimitState = dict[str, dict[str, int | str]]
 _TOKEN_LIMIT_CACHE: TTLCache[str, TokenLimitState] = TTLCache(maxsize=8, ttl=30)

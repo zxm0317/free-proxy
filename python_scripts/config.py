@@ -8,6 +8,13 @@ from pathlib import Path
 ROOT_DIR = Path(__file__).resolve().parents[1]
 DOTENV_PATH = ROOT_DIR / '.env'
 
+if os.access(ROOT_DIR, os.W_OK) or os.name == 'nt':
+    DATA_DIR = ROOT_DIR / 'data'
+else:
+    DATA_DIR = Path('/tmp') / 'free-proxy-data'
+    
+DATA_DIR.mkdir(parents=True, exist_ok=True)
+
 
 @dataclass
 class Settings:
