@@ -51,8 +51,8 @@ class PostgresAdapter(DBAdapter):
             self.is_psycopg2 = True # pg8000 also uses %s safely for dbapi
             parsed = urllib.parse.urlparse(db_url)
             self.conn = pg8000.dbapi.connect(
-                user=parsed.username,
-                password=parsed.password,
+                user=urllib.parse.unquote(parsed.username) if parsed.username else None,
+                password=urllib.parse.unquote(parsed.password) if parsed.password else None,
                 host=parsed.hostname,
                 port=parsed.port or 5432,
                 database=parsed.path.lstrip('/')
