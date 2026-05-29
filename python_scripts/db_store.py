@@ -2,7 +2,19 @@ from __future__ import annotations
 
 import logging
 import sqlite3
-import psycopg
+import urllib.parse
+
+try:
+    import psycopg
+    has_psycopg3 = True
+except ImportError:
+    has_psycopg3 = False
+
+try:
+    import psycopg2
+    has_psycopg2 = True
+except ImportError:
+    has_psycopg2 = False
 
 logger = logging.getLogger(__name__)
 
@@ -19,9 +31,19 @@ class DBAdapter:
 
 class PostgresAdapter(DBAdapter):
     def __init__(self, db_url: str):
-        self.conn = psycopg.connect(db_url)
+        self.is_psycopg2 = False
+        if has_psycopg3:
+            self.conn = psycopg.connect(db_url)
+        elif has_psycopg2:
+            self.is_psycopg2 = True
+            self.conn = psycopg2.connect(db_url)
+        else:
+            raise ImportError("Neither psycopg nor psycopg2 is installed. Cannot connect to Postgres.")
+
         
     def execute(self, query: str, params: tuple = ()) -> None:
+        if self.is_psycopg2:
+            query = query.replace("%s", "%s") # psycopg2 uses %s just like psycopg3
         with self.conn.cursor() as cur:
             cur.execute(query, params)
             
