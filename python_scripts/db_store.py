@@ -3,6 +3,9 @@ from __future__ import annotations
 import logging
 import sqlite3
 import urllib.parse
+import logging
+
+logger = logging.getLogger(__name__)
 
 try:
     import psycopg
@@ -24,8 +27,6 @@ try:
 except ImportError as e:
     has_pg8000 = False
     logger.error(f"pg8000 import failed: {e}")
-
-logger = logging.getLogger(__name__)
 
 # Persistent in-memory cache for all keys to ensure 0 database latency on reads.
 _local_cache: dict[str, str] = {}
