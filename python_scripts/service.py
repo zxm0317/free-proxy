@@ -128,7 +128,7 @@ class ProxyService:
         return OpenAIRelay(
             adapter_factory=self.provider_adapter,
             health_loader=lambda: load_health(self.health_path),
-            health_updater=lambda provider, model, ok, reason=None: upsert_health(provider, model, ok, reason, path=self.health_path),
+            health_updater=lambda provider, model, ok, reason=None, headers=None: upsert_health(provider, model, ok, reason, headers=headers, path=self.health_path),
             preferred_model_loader=lambda: load_preferred_model(self.preferred_model_path),
             health_ttl_seconds=self.health_ttl_seconds,
             configured_providers_loader=self.available_providers,
