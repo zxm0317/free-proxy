@@ -167,8 +167,6 @@ class OpenAIRelay:
         payload.pop('provider', None)
         payload['model'] = model
         payload['stream'] = request.stream
-        if 'tools' in payload and isinstance(payload['tools'], list) and len(payload['tools']) > 0:
-            payload['stream'] = False
         payload['messages'] = self._trim_messages_for_provider(provider, request.messages)
         default_output = model_default_output_tokens(provider, model, response_token_budget(provider))
         requested_output = request.max_output_tokens if isinstance(request.max_output_tokens, int) and request.max_output_tokens > 0 else default_output
@@ -321,8 +319,11 @@ class OpenAIRelay:
                 
                 if adapter_response.stream is not None:
                     headers_ms = int((time.time() - start_time) * 1000)
-                    def _timed_stream(stream, start_time_local, overall_start_local, headers_ms_local):
+                    def _timed_stream(stream, start_time_local, overall_start_local, headers_ms_local, cand_provider):
                         first = True
+                        accumulated_content = []
+                        import json
+                        from .response_normalizer import _normalize_tool_calls
                         try:
                             for chunk in stream:
                                 if first:
@@ -330,6 +331,44 @@ class OpenAIRelay:
                                     if self.debug_log:
                                         self.debug_log('route_timing', candidate_order=index, winner=f"{candidate.provider}/{candidate.model}", stream_headers_ms=headers_ms_local, first_chunk_ms=first_chunk_ms, route_build_ms=route_build_ms)
                                     first = False
+                                    
+                                if not chunk.strip():
+                                    yield chunk
+                                    continue
+                                    
+                                decoded = chunk.decode('utf-8', errors='ignore')
+                                if not decoded.startswith('data:'):
+                                    yield chunk
+                                    continue
+                                    
+                                data_str = decoded[5:].strip()
+                                if data_str == '[DONE]':
+                                    yield chunk
+                                    continue
+                                    
+                                try:
+                                    parsed_json = json.loads(data_str)
+                                    choices = parsed_json.get('choices', [])
+                                    if choices:
+                                        delta = choices[0].get('delta', {})
+                                        content = delta.get('content')
+                                        if content:
+                                            accumulated_content.append(content)
+                                            
+                                        finish_reason = choices[0].get('finish_reason')
+                                        if finish_reason == 'stop':
+                                            full_content = "".join(accumulated_content)
+                                            parsed_tc = _normalize_tool_calls(cand_provider, full_content)
+                                            if parsed_tc is not None:
+                                                choices[0]['finish_reason'] = 'tool_calls'
+                                                if 'delta' not in choices[0]:
+                                                    choices[0]['delta'] = {}
+                                                choices[0]['delta']['tool_calls'] = parsed_tc.tool_calls
+                                                rewritten = f"data: {json.dumps(parsed_json, ensure_ascii=False)}\n\n".encode('utf-8')
+                                                yield rewritten
+                                                continue
+                                except Exception:
+                                    pass
                                 yield chunk
                         finally:
                             if hasattr(stream, 'close'):
@@ -341,7 +380,7 @@ class OpenAIRelay:
                         status=adapter_response.status,
                         headers={'Content-Type': 'text/event-stream; charset=utf-8'},
                         body=None,
-                        stream_chunks=_timed_stream(adapter_response.stream, start_time, overall_start, headers_ms)
+                        stream_chunks=_timed_stream(adapter_response.stream, start_time, overall_start, headers_ms, candidate.provider)
                     )
 
                 if adapter_response.body is None:
