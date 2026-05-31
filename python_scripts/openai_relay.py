@@ -195,10 +195,10 @@ class OpenAIRelay:
             )()
         return adapter_response
 
-    def _record_health(self, provider: str, model: str, ok: bool, reason: str | None = None) -> None:
+    def _record_health(self, provider: str, model: str, ok: bool, reason: str | None = None, headers: dict[str, str] | None = None) -> None:
         if self.health_updater is None:
             return
-        self.health_updater(provider, model, ok, reason)
+        self.health_updater(provider, model, ok, reason, headers)
 
     @staticmethod
     def _prioritize_interactive_clients(candidates: list[CandidateTarget], request: ChatRequest) -> list[CandidateTarget]:
@@ -312,7 +312,7 @@ class OpenAIRelay:
                     break
                 continue
             if adapter_response.status < 400:
-                self._record_health(candidate.provider, candidate.model, True, None)
+                self._record_health(candidate.provider, candidate.model, True, None, headers=adapter_response.headers)
                 if self.usage_incrementer:
                     import threading
                     threading.Thread(target=self.usage_incrementer, args=(candidate.provider, candidate.model), daemon=True).start()

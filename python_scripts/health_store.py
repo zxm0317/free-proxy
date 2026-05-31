@@ -64,6 +64,7 @@ def upsert_health(
     model: str,
     ok: bool,
     reason: str | None = None,
+    headers: dict[str, str] | None = None,
     *,
     path: Path | None = None,
     now_ts: int | None = None,
@@ -73,11 +74,20 @@ def upsert_health(
     previous = state.get(key, {})
     previous_success = int(previous.get('success_streak', 0)) if isinstance(previous.get('success_streak', 0), int) else 0
     previous_failure = int(previous.get('failure_streak', 0)) if isinstance(previous.get('failure_streak', 0), int) else 0
+    
+    rate_limits = previous.get('rate_limits', {})
+    if isinstance(headers, dict) and headers:
+        for key in ('x-ratelimit-remaining-requests', 'x-ratelimit-remaining-tokens', 'x-ratelimit-reset', 'x-ratelimit-remaining-tokens-today', 'x-ratelimit-limit-requests'):
+            for h_key, h_val in headers.items():
+                if h_key.lower() == key:
+                    rate_limits[key] = str(h_val)
+
     state[key] = {
         'ok': ok,
         'reason': reason,
         'checked_at': int(time.time()) if now_ts is None else int(now_ts),
         'success_streak': previous_success + 1 if ok else 0,
         'failure_streak': previous_failure + 1 if not ok else 0,
+        'rate_limits': rate_limits,
     }
     save_health(state, path)

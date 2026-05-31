@@ -227,6 +227,12 @@ async def get_usage_stats():
     return {'stats': stats}
 
 
+@app.get('/api/models-stats')
+async def get_models_stats():
+    svc = get_service()
+    return await run_in_threadpool(svc.models_stats)
+
+
 @app.post('/api/preferred-model')
 async def save_preferred_model(request: Request):
     payload, error_response = await _read_json_payload(request)

@@ -1,0 +1,1 @@
+{"id":"chatcmpl-1779951899","object":"chat.completion","created":1779951899,"model":"openrouter/openrouter/auto:free","choices":[{"index":0,"message":{"role":"assistant","content":"Hello! How can I help you today?"},"finish_reason":"stop"}],"usage":{"prompt_tokens":0,"completion_tokens":0,"total_tokens":0}}

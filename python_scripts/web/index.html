@@ -698,12 +698,39 @@
                         </tbody>
                     </table>
                 </div>
+                </div>
+            </section>
+
+            <section class="card" id="routingStatusSection">
+                <div class="card-head">
+                    <div>
+                        <h2>5. 路由探针与排行 (Routing Status)</h2>
+                        <div class="subtle">展示 `free-proxy/auto` 在后端的实时大模型降级接力顺序与最新健康状态，以及抓取到的剩余额度。</div>
+                    </div>
+                    <button class="btn btn-secondary" onclick="fetchModelsStats()">刷新排行</button>
+                </div>
+                <div class="table-container" style="margin-top: 12px; overflow-x: auto;">
+                    <table style="width: 100%; border-collapse: collapse; text-align: left; background: #fff; border: 1px solid var(--line); border-radius: 8px;">
+                        <thead>
+                            <tr style="border-bottom: 1px solid var(--line); background: #f9f9f9;">
+                                <th style="padding: 12px; font-weight: 600; width: 60px;">顺位</th>
+                                <th style="padding: 12px; font-weight: 600;">Provider</th>
+                                <th style="padding: 12px; font-weight: 600;">模型 (Model)</th>
+                                <th style="padding: 12px; font-weight: 600;">状态</th>
+                                <th style="padding: 12px; font-weight: 600;">额度剩余 / 重置 (Rate Limit)</th>
+                            </tr>
+                        </thead>
+                        <tbody id="modelsStatsBody">
+                            <tr><td colspan="5" style="padding: 12px; text-align: center; color: var(--muted);">正在加载实时排行...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
             </section>
 
             <section class="card">
                 <div class="card-head">
                     <div>
-                        <h2>5. 接入说明</h2>
+                        <h2>6. 接入说明</h2>
                         <div class="subtle">以下示例与当前真实实现一致，只保留稳定别名 `free-proxy/auto`。</div>
                     </div>
                 </div>
@@ -1565,6 +1592,7 @@ opencode run -m free-proxy/auto "Reply with exactly OK"</pre>
             await loadPreferredModel();
             await ensureVisibleModels(forceModels);
             await fetchUsageStats();
+            await fetchModelsStats();
             setDiagnostics('status-info', [
                 '动作: 页面初始化',
                 `结果: 已加载 ${configuredProviders().length} 个已配置 provider`,
@@ -1594,6 +1622,56 @@ opencode run -m free-proxy/auto "Reply with exactly OK"</pre>
             } catch (error) {
                 console.error(error);
                 tbody.innerHTML = '<tr><td colspan="3" style="padding: 12px; text-align: center; color: var(--danger);">加载失败</td></tr>';
+            }
+        }
+
+        async function fetchModelsStats() {
+            try {
+                const res = await fetch('/api/models-stats');
+                const data = await res.json();
+                const tbody = document.getElementById('modelsStatsBody');
+                if (!tbody) return;
+                
+                if (!data || !data.models || data.models.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="5" style="padding: 12px; text-align: center; color: var(--muted);">暂无模型排行数据</td></tr>';
+                    return;
+                }
+                
+                tbody.innerHTML = data.models.map((item, index) => {
+                    const isHealthy = item.ok === true;
+                    const isUnhealthy = item.ok === false;
+                    const statusHtml = isHealthy 
+                        ? '<span style="color: #176347; background: #e7f3eb; padding: 2px 6px; border-radius: 4px; font-size: 12px;">🟢 健康</span>' 
+                        : (isUnhealthy ? '<span style="color: #c92a2a; background: #fff5f5; padding: 2px 6px; border-radius: 4px; font-size: 12px;">🔴 熔断中</span>' 
+                        : '<span style="color: #495057; background: #f1f3f5; padding: 2px 6px; border-radius: 4px; font-size: 12px;">⚪ 未知</span>');
+                    
+                    const limits = item.rate_limits || {};
+                    let limitHtml = '<span style="color: var(--muted); font-size: 12px;">无</span>';
+                    
+                    const reqRemaining = limits['x-ratelimit-remaining-requests'];
+                    const reqLimit = limits['x-ratelimit-limit-requests'];
+                    const tokRemaining = limits['x-ratelimit-remaining-tokens'] || limits['x-ratelimit-remaining-tokens-today'];
+                    
+                    let parts = [];
+                    if (reqRemaining) parts.push(`Req: ${reqRemaining}${reqLimit ? '/' + reqLimit : ''}`);
+                    if (tokRemaining) parts.push(`Tok: ${tokRemaining}`);
+                    
+                    if (parts.length > 0) {
+                        limitHtml = `<span style="font-size: 12px;">${parts.join(' | ')}</span>`;
+                    }
+                    
+                    return `
+                        <tr style="border-bottom: 1px solid var(--line);">
+                            <td style="padding: 12px; font-weight: 500;">#${index + 1}</td>
+                            <td style="padding: 12px;">${escapeHtml(item.provider)}</td>
+                            <td style="padding: 12px; font-family: monospace;">${escapeHtml(item.model)}</td>
+                            <td style="padding: 12px;">${statusHtml}</td>
+                            <td style="padding: 12px;">${limitHtml}</td>
+                        </tr>
+                    `;
+                }).join('');
+            } catch (err) {
+                console.error('fetchModelsStats error:', err);
             }
         }
 

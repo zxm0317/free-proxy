@@ -386,6 +386,35 @@ class ProxyService:
             except ProviderError as exc:
                 providers.append({'provider': provider_name, 'error': str(exc), 'models': []})
         return {'providers': providers}
+        
+    def models_stats(self) -> dict[str, object]:
+        from .provider_routing import build_auto_candidates
+        health = load_health(self.health_path)
+        candidates = build_auto_candidates(
+            requested_model=None,
+            configured=self.available_providers(),
+            health=health,
+            now_ts=int(time.time()),
+            ttl_seconds=self.health_ttl_seconds,
+        )
+        stats = []
+        for c in candidates:
+            key = f"{c.provider}/{c.model}"
+            entry = health.get(key, {})
+            score = 0
+            from .provider_routing import _health_score
+            if isinstance(entry, dict):
+                score = _health_score(entry, int(time.time()), self.health_ttl_seconds)
+            stats.append({
+                'provider': c.provider,
+                'model': c.model,
+                'source': c.source,
+                'rank': c.rank,
+                'score': score,
+                'ok': entry.get('ok'),
+                'rate_limits': entry.get('rate_limits', {})
+            })
+        return {'models': stats}
 
     def resolve_openai_target(self, payload: JsonObject) -> ResolvedOpenAIRequest:
         raw_model = payload.get('model')
@@ -552,7 +581,7 @@ class ProxyService:
             )
 
         if status < 400:
-            upsert_health(provider_name, normalized_model_id, True, path=self.health_path)
+            upsert_health(provider_name, normalized_model_id, True, headers=headers, path=self.health_path)
             if upstream_stream:
                 return OpenAIForwardResult(ok=True, provider=provider_name, model=normalized_model_id, status=status, headers=headers, body=None, stream_chunks=stream_iter)
             return OpenAIForwardResult(ok=True, provider=provider_name, model=normalized_model_id, status=status, headers=headers, body=body)
@@ -560,7 +589,7 @@ class ProxyService:
         error_body = b''.join(bytes(chunk) for chunk in stream_iter if chunk) if upstream_stream else body
         text = error_body.decode('utf-8', errors='ignore')
         failure = classify_error(status, text)
-        upsert_health(provider_name, normalized_model_id, False, reason=failure.category, path=self.health_path)
+        upsert_health(provider_name, normalized_model_id, False, reason=failure.category, headers=headers, path=self.health_path)
         if self.debug_log is not None:
             self.debug_log(
                 'request_failed',
