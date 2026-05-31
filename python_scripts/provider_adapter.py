@@ -270,6 +270,8 @@ class ProviderAdapter:
                                     url = img.get('url')
                                 elif isinstance(img, str):
                                     url = img
+                                elif img is None and 'url' in block:
+                                    url = block.get('url')
                                 
                                 if isinstance(url, str) and url.startswith('data:image/'):
                                     try:
