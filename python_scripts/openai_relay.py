@@ -363,7 +363,15 @@ class OpenAIRelay:
                                                 choices[0]['finish_reason'] = 'tool_calls'
                                                 if 'delta' not in choices[0]:
                                                     choices[0]['delta'] = {}
-                                                choices[0]['delta']['tool_calls'] = parsed_tc.tool_calls
+                                                    
+                                                # In SSE streaming, tool_calls must have an 'index' field
+                                                stream_tool_calls = []
+                                                for i, tc in enumerate(parsed_tc.tool_calls):
+                                                    stc = dict(tc)
+                                                    stc['index'] = i
+                                                    stream_tool_calls.append(stc)
+                                                    
+                                                choices[0]['delta']['tool_calls'] = stream_tool_calls
                                                 rewritten = f"data: {json.dumps(parsed_json, ensure_ascii=False)}\n\n".encode('utf-8')
                                                 yield rewritten
                                                 continue

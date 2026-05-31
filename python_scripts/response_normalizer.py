@@ -200,7 +200,12 @@ def wrap_openai_body_as_sse(*, provider: str, fallback_model: str, body: bytes) 
         if 'tool_calls' in normalized_delta:
             tool_calls = normalized_delta['tool_calls']
             if isinstance(tool_calls, list):
-                normalized_delta['tool_calls'] = tool_calls
+                stream_tool_calls = []
+                for i, tc in enumerate(tool_calls):
+                    stc = dict(tc)
+                    stc['index'] = i
+                    stream_tool_calls.append(stc)
+                normalized_delta['tool_calls'] = stream_tool_calls
         chunks.append(
             _sse_json_line(
                 {
