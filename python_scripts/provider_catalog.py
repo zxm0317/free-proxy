@@ -21,33 +21,33 @@ class ProviderMeta:
 
 PROVIDERS: tuple[ProviderMeta, ...] = (
     ProviderMeta(
-        'openrouter',
-        'https://openrouter.ai/api/v1',
-        'OPENROUTER_API_KEY',
+        'github',
+        'https://models.github.ai/inference',
+        'GITHUB_MODELS_API_KEY',
         'openai',
-        model_hints=('openrouter/auto:free',),
-    ),
-    ProviderMeta(
-        'groq',
-        'https://api.groq.com/openai/v1',
-        'GROQ_API_KEY',
-        'openai',
-        model_hints=('llama-3.1-8b-instant', 'llama-3.3-70b-versatile'),
+        model_hints=('gpt-4o', 'DeepSeek-V3-0324', 'gpt-4.1-mini', 'gpt-4o-mini'),
+        required_query=(('api-version', '2024-12-01-preview'),),
     ),
     ProviderMeta(
         'gemini',
         'https://generativelanguage.googleapis.com/v1beta',
         'GEMINI_API_KEY',
         'gemini',
-        model_hints=('gemini-3.1-flash-lite-preview', 'gemini-2.0-flash'),
+        model_hints=('gemini-2.0-flash', 'gemini-3.1-flash-lite-preview'),
     ),
     ProviderMeta(
-        'github',
-        'https://models.github.ai/inference',
-        'GITHUB_MODELS_API_KEY',
+        'groq',
+        'https://api.groq.com/openai/v1',
+        'GROQ_API_KEY',
         'openai',
-        model_hints=('gpt-4o', 'gpt-4o-mini', 'gpt-4.1-mini', 'DeepSeek-V3-0324'),
-        required_query=(('api-version', '2024-12-01-preview'),),
+        model_hints=('llama-3.3-70b-versatile', 'llama-3.1-8b-instant'),
+    ),
+    ProviderMeta(
+        'sambanova',
+        'https://api.sambanova.ai/v1',
+        'SAMBANOVA_API_KEY',
+        'openai',
+        model_hints=('DeepSeek-V3.1-Terminus', 'Qwen3-235B', 'Meta-Llama-3.1-8B-Instruct'),
     ),
     ProviderMeta(
         'mistral',
@@ -57,11 +57,11 @@ PROVIDERS: tuple[ProviderMeta, ...] = (
         model_hints=('mistral-large-latest', 'mistral-medium-latest', 'mistral-small-latest'),
     ),
     ProviderMeta(
-        'sambanova',
-        'https://api.sambanova.ai/v1',
-        'SAMBANOVA_API_KEY',
+        'openrouter',
+        'https://openrouter.ai/api/v1',
+        'OPENROUTER_API_KEY',
         'openai',
-        model_hints=('DeepSeek-V3.1-Terminus', 'Qwen3-235B', 'Meta-Llama-3.1-8B-Instruct'),
+        model_hints=('openrouter/auto:free',),
     ),
 )
 
