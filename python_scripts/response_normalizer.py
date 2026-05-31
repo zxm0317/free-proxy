@@ -6,6 +6,10 @@ import json
 import time
 from dataclasses import dataclass
 
+@dataclass(frozen=True)
+class ParsedToolCalls:
+    tool_calls: list[dict[str, object]]
+
 
 
 @dataclass(frozen=True)
@@ -20,7 +24,62 @@ def sanitize_model_text(text: str) -> str:
     return text.strip() if text else text
 
 
-def _normalize_tool_calls(provider: str, content: str) -> None:
+def _normalize_tool_calls(provider: str, content: str) -> ParsedToolCalls | None:
+    if '"action"' not in content and "'action'" not in content:
+        return None
+    
+    tool_calls = []
+    start_idx = 0
+    while True:
+        start_idx = content.find('{', start_idx)
+        if start_idx == -1:
+            break
+        
+        brace_count = 0
+        end_idx = -1
+        in_string = False
+        escape = False
+        
+        for i in range(start_idx, len(content)):
+            char = content[i]
+            if not escape:
+                if char == '"':
+                    in_string = not in_string
+                elif char == '{' and not in_string:
+                    brace_count += 1
+                elif char == '}' and not in_string:
+                    brace_count -= 1
+                    if brace_count == 0:
+                        end_idx = i
+                        break
+            if char == '\\' and not escape:
+                escape = True
+            else:
+                escape = False
+                
+        if end_idx != -1:
+            json_str = content[start_idx:end_idx+1]
+            try:
+                parsed = json.loads(json_str)
+                if isinstance(parsed, dict) and 'action' in parsed:
+                    action = str(parsed.pop('action'))
+                    import uuid
+                    tool_calls.append({
+                        'id': f'call_{uuid.uuid4().hex[:8]}',
+                        'type': 'function',
+                        'function': {
+                            'name': action,
+                            'arguments': json.dumps(parsed, ensure_ascii=False)
+                        }
+                    })
+            except Exception:
+                pass
+            start_idx = end_idx + 1
+        else:
+            start_idx += 1
+            
+    if tool_calls:
+        return ParsedToolCalls(tool_calls=tool_calls)
     return None
 
 
@@ -42,7 +101,7 @@ def _stream_text_delta(provider: str, choice: object) -> dict[str, object]:
         if isinstance(content, str) and content:
             parsed = _normalize_tool_calls(provider, content)
             if parsed is not None:
-                return {'tool_calls': parsed.tool_calls}
+                return {'role': str(message.get('role') or 'assistant'), 'content': sanitize_model_text(content), 'tool_calls': parsed.tool_calls}
             return {'role': str(message.get('role') or 'assistant'), 'content': sanitize_model_text(content)}
         reasoning = message.get('reasoning_content')
         if isinstance(reasoning, str) and reasoning:
@@ -85,7 +144,7 @@ def _normalized_assistant_message(provider: str, parsed: object) -> tuple[str | 
         if isinstance(content, str) and content.strip():
             parsed_tool_calls = _normalize_tool_calls(provider, content.strip())
             if parsed_tool_calls is not None:
-                return None, parsed_tool_calls.tool_calls, 'tool_calls'
+                return sanitize_model_text(content.strip()), parsed_tool_calls.tool_calls, 'tool_calls'
             return sanitize_model_text(content.strip()), None, finish_reason
         reasoning = message.get('reasoning_content')
         if isinstance(reasoning, str) and reasoning.strip():
@@ -104,7 +163,7 @@ def _normalized_assistant_message(provider: str, parsed: object) -> tuple[str | 
     if isinstance(text, str) and text.strip():
         parsed_tool_calls = _normalize_tool_calls(provider, text.strip())
         if parsed_tool_calls is not None:
-            return None, parsed_tool_calls.tool_calls, 'tool_calls'
+            return sanitize_model_text(text.strip()), parsed_tool_calls.tool_calls, 'tool_calls'
         return sanitize_model_text(text.strip()), None, finish_reason
     return None, None, finish_reason
 
@@ -113,9 +172,7 @@ def _assistant_message_payload(*, provider: str, model: str, content: str | None
     message: dict[str, object] = {'role': 'assistant'}
     if tool_calls:
         message['tool_calls'] = tool_calls
-        message['content'] = None
-    else:
-        message['content'] = content or ''
+    message['content'] = content or ''
     return {
         'id': f'chatcmpl-{int(time.time())}',
         'object': 'chat.completion',
@@ -151,7 +208,7 @@ def wrap_openai_body_as_sse(*, provider: str, fallback_model: str, body: bytes) 
                     'object': 'chat.completion.chunk',
                     'created': created,
                     'model': actual_model,
-                    'choices': [{'index': 0, 'delta': normalized_delta, 'finish_reason': None if 'tool_calls' not in normalized_delta else 'tool_calls'}],
+                    'choices': [{'index': 0, 'delta': normalized_delta, 'finish_reason': None}],
                 }
             )
         )

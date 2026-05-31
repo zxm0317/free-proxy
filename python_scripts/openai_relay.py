@@ -167,6 +167,8 @@ class OpenAIRelay:
         payload.pop('provider', None)
         payload['model'] = model
         payload['stream'] = request.stream
+        if 'tools' in payload and isinstance(payload['tools'], list) and len(payload['tools']) > 0:
+            payload['stream'] = False
         payload['messages'] = self._trim_messages_for_provider(provider, request.messages)
         default_output = model_default_output_tokens(provider, model, response_token_budget(provider))
         requested_output = request.max_output_tokens if isinstance(request.max_output_tokens, int) and request.max_output_tokens > 0 else default_output
