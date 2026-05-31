@@ -281,8 +281,8 @@ class ProviderAdapter:
                                                 'data': base64_data
                                             }
                                         })
-                                        except Exception:
-                                            pass
+                                    except Exception:
+                                        pass
                     if parts:
                         contents.append({'role': gemini_role, 'parts': parts})
             
