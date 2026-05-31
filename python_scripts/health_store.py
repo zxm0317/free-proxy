@@ -77,10 +77,10 @@ def upsert_health(
     
     rate_limits = previous.get('rate_limits', {})
     if isinstance(headers, dict) and headers:
-        for key in ('x-ratelimit-remaining-requests', 'x-ratelimit-remaining-tokens', 'x-ratelimit-reset', 'x-ratelimit-remaining-tokens-today', 'x-ratelimit-limit-requests'):
+        for header_key in ('x-ratelimit-remaining-requests', 'x-ratelimit-remaining-tokens', 'x-ratelimit-reset', 'x-ratelimit-remaining-tokens-today', 'x-ratelimit-limit-requests'):
             for h_key, h_val in headers.items():
-                if h_key.lower() == key:
-                    rate_limits[key] = str(h_val)
+                if h_key.lower() == header_key:
+                    rate_limits[header_key] = str(h_val)
 
     state[key] = {
         'ok': ok,
