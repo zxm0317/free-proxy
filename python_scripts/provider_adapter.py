@@ -243,8 +243,50 @@ class ProviderAdapter:
         max_tokens = payload.get('max_tokens')
         token_limit = int(max_tokens) if isinstance(max_tokens, int) else 256
         if self.provider.format == 'gemini':
+            contents = []
+            messages = payload.get('messages')
+            if isinstance(messages, list):
+                for item in messages:
+                    if not isinstance(item, dict):
+                        continue
+                    role = item.get('role', 'user')
+                    gemini_role = 'model' if role == 'assistant' else 'user'
+                    content = item.get('content')
+                    parts = []
+                    if isinstance(content, str):
+                        if content.strip():
+                            parts.append({'text': content})
+                    elif isinstance(content, list):
+                        for block in content:
+                            if not isinstance(block, dict):
+                                continue
+                            text = block.get('text')
+                            if isinstance(text, str):
+                                parts.append({'text': text})
+                            elif block.get('type') == 'image_url':
+                                img = block.get('image_url')
+                                if isinstance(img, dict):
+                                    url = img.get('url')
+                                    if isinstance(url, str) and url.startswith('data:image/'):
+                                        try:
+                                            header, base64_data = url.split(',', 1)
+                                            mime_type = header.split(';')[0].replace('data:', '')
+                                            parts.append({
+                                                'inlineData': {
+                                                    'mimeType': mime_type,
+                                                    'data': base64_data
+                                                }
+                                            })
+                                        except Exception:
+                                            pass
+                    if parts:
+                        contents.append({'role': gemini_role, 'parts': parts})
+            
+            if not contents:
+                contents = [{'role': 'user', 'parts': [{'text': prompt}]}]
+
             request_payload: JsonObject = {
-                'contents': [{'role': 'user', 'parts': [{'text': prompt}]}],
+                'contents': contents,
                 'generationConfig': {'temperature': 0, 'maxOutputTokens': token_limit},
             }
             path = f'/models/{self.normalize_model_id(str(payload.get("model", "")))}:generateContent'
