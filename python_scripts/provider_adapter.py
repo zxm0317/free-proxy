@@ -265,18 +265,22 @@ class ProviderAdapter:
                                 parts.append({'text': text})
                             elif block.get('type') == 'image_url':
                                 img = block.get('image_url')
+                                url = None
                                 if isinstance(img, dict):
                                     url = img.get('url')
-                                    if isinstance(url, str) and url.startswith('data:image/'):
-                                        try:
-                                            header, base64_data = url.split(',', 1)
-                                            mime_type = header.split(';')[0].replace('data:', '')
-                                            parts.append({
-                                                'inlineData': {
-                                                    'mimeType': mime_type,
-                                                    'data': base64_data
-                                                }
-                                            })
+                                elif isinstance(img, str):
+                                    url = img
+                                
+                                if isinstance(url, str) and url.startswith('data:image/'):
+                                    try:
+                                        header, base64_data = url.split(',', 1)
+                                        mime_type = header.split(';')[0].replace('data:', '')
+                                        parts.append({
+                                            'inlineData': {
+                                                'mimeType': mime_type,
+                                                'data': base64_data
+                                            }
+                                        })
                                         except Exception:
                                             pass
                     if parts:
