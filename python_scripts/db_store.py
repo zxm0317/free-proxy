@@ -196,36 +196,41 @@ def get_all_keys(db_url: str) -> dict[str, str]:
     finally:
         adapter.close()
 
-def increment_model_usage(db_url: str, provider: str, model: str) -> None:
-    """Increments the usage count for a specific provider and model."""
-    global _usage_stats_cache, _usage_stats_cache_ts
-    adapter = get_adapter(db_url)
+import json
+import os
+
+USAGE_STATS_PATH = '/tmp/model_usage_stats.json'
+
+def _load_local_usage_stats() -> dict[str, int]:
     try:
-        adapter.execute("""
-            INSERT INTO model_usage_stats (provider, model, usage_count)
-            VALUES (%s, %s, 1)
-            ON CONFLICT (provider, model)
-            DO UPDATE SET usage_count = model_usage_stats.usage_count + 1
-        """, (provider, model))
-        adapter.commit()
-    finally:
-        adapter.close()
-    
-    # Invalidate cache
-    _usage_stats_cache = None
+        if os.path.exists(USAGE_STATS_PATH):
+            with open(USAGE_STATS_PATH, 'r', encoding='utf-8') as f:
+                return json.load(f)
+    except Exception:
+        pass
+    return {}
+
+def _save_local_usage_stats(data: dict[str, int]):
+    try:
+        with open(USAGE_STATS_PATH, 'w', encoding='utf-8') as f:
+            json.dump(data, f)
+    except Exception:
+        pass
+
+def increment_model_usage(db_url: str, provider: str, model: str) -> None:
+    """Increments the usage count for a specific provider and model using local file."""
+    data = _load_local_usage_stats()
+    key = f"{provider}/{model}"
+    data[key] = data.get(key, 0) + 1
+    _save_local_usage_stats(data)
 
 def get_model_usage_stats(db_url: str) -> list[dict[str, object]]:
-    """Retrieves usage statistics for all models."""
-    global _usage_stats_cache, _usage_stats_cache_ts
-    if _usage_stats_cache is not None and time.time() - _usage_stats_cache_ts < 30:
-        return _usage_stats_cache
-
-    adapter = get_adapter(db_url)
-    try:
-        rows = adapter.fetchall("SELECT provider, model, usage_count FROM model_usage_stats ORDER BY usage_count DESC")
-        stats = [{"provider": row[0], "model": row[1], "usage_count": row[2]} for row in rows]
-        _usage_stats_cache = stats
-        _usage_stats_cache_ts = time.time()
-        return stats
-    finally:
-        adapter.close()
+    """Retrieves usage statistics for all models from local file."""
+    data = _load_local_usage_stats()
+    stats = []
+    for k, v in data.items():
+        if '/' in k:
+            p, m = k.split('/', 1)
+            stats.append({"provider": p, "model": m, "usage_count": v})
+    stats.sort(key=lambda x: x["usage_count"], reverse=True)
+    return stats
