@@ -431,7 +431,12 @@ class OpenAIRelay:
             failure = classify_error(adapter_response.status, body_bytes.decode('utf-8', errors='ignore'))
             if self.debug_log:
                 self.debug_log('upstream_error_details', provider=candidate.provider, model=candidate.model, status=adapter_response.status, raw_body=body_bytes.decode('utf-8', errors='ignore'))
-            self._record_health(candidate.provider, candidate.model, False, failure.category)
+            
+            # ONLY melt the model if the error is a genuine provider/availability issue.
+            # Client errors like token_limit (413) or unknown (400 invalid param) should NOT melt the model globally.
+            if failure.category in ('server', 'network', 'rate_limit', 'auth', 'quota', 'model_not_found'):
+                self._record_health(candidate.provider, candidate.model, False, failure.category)
+                
             if candidate.provider not in listed_loaded:
                 listed_loaded.add(candidate.provider)
                 candidates = self._append_provider_listed_candidate(candidates, candidate.provider, index)
