@@ -1595,8 +1595,11 @@ opencode run -m free-proxy/auto "Reply with exactly OK"</pre>
             await loadStatuses();
             await loadPreferredModel();
             await ensureVisibleModels(forceModels);
-            await fetchUsageStats();
-            await fetchModelsStats();
+            
+            // Fire and forget stats loading to avoid blocking the main UI
+            fetchUsageStats();
+            fetchModelsStats();
+            
             setDiagnostics('status-info', [
                 '动作: 页面初始化',
                 `结果: 已加载 ${configuredProviders().length} 个已配置 provider`,

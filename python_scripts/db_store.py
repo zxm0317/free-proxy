@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import sqlite3
 import urllib.parse
+import time
 import logging
 
 logger = logging.getLogger(__name__)
@@ -31,6 +32,9 @@ except ImportError as e:
 # Persistent in-memory cache for all keys to ensure 0 database latency on reads.
 _local_cache: dict[str, str] = {}
 _cache_initialized: bool = False
+
+_usage_stats_cache: list[dict[str, object]] | None = None
+_usage_stats_cache_ts: float = 0
 
 class DBAdapter:
     def execute(self, query: str, params: tuple) -> None: ...
@@ -194,6 +198,7 @@ def get_all_keys(db_url: str) -> dict[str, str]:
 
 def increment_model_usage(db_url: str, provider: str, model: str) -> None:
     """Increments the usage count for a specific provider and model."""
+    global _usage_stats_cache, _usage_stats_cache_ts
     adapter = get_adapter(db_url)
     try:
         adapter.execute("""
@@ -205,12 +210,22 @@ def increment_model_usage(db_url: str, provider: str, model: str) -> None:
         adapter.commit()
     finally:
         adapter.close()
+    
+    # Invalidate cache
+    _usage_stats_cache = None
 
 def get_model_usage_stats(db_url: str) -> list[dict[str, object]]:
     """Retrieves usage statistics for all models."""
+    global _usage_stats_cache, _usage_stats_cache_ts
+    if _usage_stats_cache is not None and time.time() - _usage_stats_cache_ts < 30:
+        return _usage_stats_cache
+
     adapter = get_adapter(db_url)
     try:
         rows = adapter.fetchall("SELECT provider, model, usage_count FROM model_usage_stats ORDER BY usage_count DESC")
-        return [{"provider": row[0], "model": row[1], "usage_count": row[2]} for row in rows]
+        stats = [{"provider": row[0], "model": row[1], "usage_count": row[2]} for row in rows]
+        _usage_stats_cache = stats
+        _usage_stats_cache_ts = time.time()
+        return stats
     finally:
         adapter.close()
