@@ -9,7 +9,7 @@ from collections.abc import Callable, Iterable
 from pathlib import Path
 
 from .config import DOTENV_PATH, hydrate_env, load_dotenv
-from .db_store import get_all_keys, get_key, init_db, upsert_key, increment_model_usage, get_model_usage_stats
+from .db_store import get_all_keys, get_key, init_db, upsert_key, increment_model_usage, get_model_usage_stats, get_manual_order, save_manual_order
 from .errors import classify_error, remediation_suggestion
 from .health_store import load_health, upsert_health
 from .openai_relay import OpenAIRelay
@@ -134,10 +134,17 @@ class ProxyService:
             configured_providers_loader=self.available_providers,
             debug_log=self.debug_log,
             usage_incrementer=lambda provider, model: increment_model_usage(self.db_url, provider, model),
+            manual_order_loader=self.get_manual_order,
         )
 
     def get_usage_stats(self) -> list[dict[str, object]]:
         return get_model_usage_stats(self.db_url)
+
+    def get_manual_order(self, bypass_cache: bool = False) -> list[str]:
+        return get_manual_order(self.db_url, bypass_cache)
+
+    def save_manual_order(self, order: list[str]) -> None:
+        save_manual_order(self.db_url, order)
 
     def preferred_model(self) -> str | None:
         return load_preferred_model(self.preferred_model_path)
@@ -390,12 +397,14 @@ class ProxyService:
     def models_stats(self) -> dict[str, object]:
         from .provider_routing import build_auto_candidates
         health = load_health(self.health_path)
+        manual_order = self.get_manual_order()
         candidates = build_auto_candidates(
             requested_model=None,
             configured=self.available_providers(),
             health=health,
             now_ts=int(time.time()),
             ttl_seconds=self.health_ttl_seconds,
+            manual_order=manual_order
         )
         stats = []
         for c in candidates:
@@ -475,6 +484,7 @@ class ProxyService:
             health=load_health(self.health_path),
             now_ts=int(time.time()),
             ttl_seconds=self.health_ttl_seconds,
+            manual_order=self.get_manual_order()
         )
         if not candidates:
             return OpenAIForwardResult(

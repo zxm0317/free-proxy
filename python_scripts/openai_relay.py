@@ -38,6 +38,7 @@ class OpenAIRelay:
         configured_providers_loader=configured_provider_names,
         debug_log=None,
         usage_incrementer=None,
+        manual_order_loader=None,
     ) -> None:
         self.adapter_factory = adapter_factory
         self.health_loader = health_loader
@@ -47,6 +48,7 @@ class OpenAIRelay:
         self.configured_providers_loader = configured_providers_loader
         self.debug_log = debug_log
         self.usage_incrementer = usage_incrementer
+        self.manual_order_loader = manual_order_loader
 
     def normalize(self, payload: dict[str, object]) -> ChatRequest:
         return normalize_chat_request(payload)
@@ -274,6 +276,9 @@ class OpenAIRelay:
         if callable(self.preferred_model_loader):
             preferred_model = str(self.preferred_model_loader() or '').strip()
         requested_model = request.requested_model or (preferred_model if preferred_model else None)
+        manual_order = []
+        if self.manual_order_loader:
+            manual_order = self.manual_order_loader()
         candidates = self._prioritize_interactive_clients(
             build_auto_candidates(
                 requested_model=requested_model,
@@ -281,6 +286,7 @@ class OpenAIRelay:
                 health=self.health_loader(),
                 now_ts=int(time.time()),
                 ttl_seconds=self.health_ttl_seconds,
+                manual_order=manual_order,
             ),
             request,
         )

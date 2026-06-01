@@ -82,17 +82,6 @@ def resolve_model_request(
 
     raise ValueError('no configured providers found, please save at least one API key first')
 
-def _get_manual_order() -> list[str]:
-    import json
-    try:
-        with open('/tmp/manual_model_order.json', 'r', encoding='utf-8') as f:
-            data = json.load(f)
-            if isinstance(data, list):
-                return [str(x) for x in data]
-    except Exception:
-        pass
-    return []
-
 def resolve_alias_candidates(
     alias: AliasName,
     configured: list[str],
@@ -100,6 +89,7 @@ def resolve_alias_candidates(
     health: HealthState | None = None,
     now_ts: int | None = None,
     ttl_seconds: int = 600,
+    manual_order: list[str] | None = None,
 ) -> list[tuple[str, str]]:
     ordered: list[tuple[str, str]] = []
     if alias != 'auto':
@@ -107,7 +97,7 @@ def resolve_alias_candidates(
 
     snapshot = health or {}
     timestamp = int(time.time()) if now_ts is None else now_ts
-    manual_order = _get_manual_order()
+    manual_order = manual_order or []
     from .provider_catalog import get_model_capabilities
     
     ranked: list[tuple[int, int, int, int, str, str]] = []
@@ -135,7 +125,7 @@ def resolve_alias_candidates(
     return ordered
 
 
-def build_auto_candidates(*, requested_model: str | None, configured: list[str], health: HealthState, now_ts: int, ttl_seconds: int) -> list[CandidateTarget]:
+def build_auto_candidates(*, requested_model: str | None, configured: list[str], health: HealthState, now_ts: int, ttl_seconds: int, manual_order: list[str] | None = None) -> list[CandidateTarget]:
     ordered: list[CandidateTarget] = []
     seen: set[tuple[str, str]] = set()
 
@@ -149,7 +139,7 @@ def build_auto_candidates(*, requested_model: str | None, configured: list[str],
     if requested_model and '/' in requested_model:
         provider_name, model_id = requested_model.split('/', 1)
         push(provider_name, model_id, 'user_requested')
-    manual_order = _get_manual_order()
+    manual_order = manual_order or []
     from .provider_catalog import get_model_capabilities
     
     ranked: list[tuple[int, int, int, int, str, str]] = []

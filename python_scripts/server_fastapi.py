@@ -234,21 +234,12 @@ async def get_models_stats():
 
 @app.get('/api/manual-order', dependencies=[Depends(check_admin_auth)])
 async def get_manual_order():
-    import json
-    import os
-    try:
-        path = '/tmp/manual_model_order.json'
-        if os.path.exists(path):
-            with open(path, 'r', encoding='utf-8') as f:
-                data = json.load(f)
-                return {'order': data if isinstance(data, list) else []}
-    except Exception:
-        pass
-    return {'order': []}
+    svc = get_service()
+    order = await run_in_threadpool(svc.get_manual_order, True)
+    return {'order': order}
 
 @app.post('/api/manual-order', dependencies=[Depends(check_admin_auth)])
 async def save_manual_order(request: Request):
-    import json
     payload, error_response = await _read_json_payload(request)
     if error_response is not None:
         return error_response
@@ -258,8 +249,9 @@ async def save_manual_order(request: Request):
         return JSONResponse({'ok': False, 'error': 'order must be a list'}, status_code=400)
         
     try:
-        with open('/tmp/manual_model_order.json', 'w', encoding='utf-8') as f:
-            json.dump([str(x) for x in order], f)
+        svc = get_service()
+        str_order = [str(x) for x in order]
+        await run_in_threadpool(svc.save_manual_order, str_order)
         return {'ok': True}
     except Exception as exc:
         return JSONResponse({'ok': False, 'error': str(exc)}, status_code=500)

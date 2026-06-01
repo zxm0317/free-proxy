@@ -234,3 +234,49 @@ def get_model_usage_stats(db_url: str) -> list[dict[str, object]]:
             stats.append({"provider": p, "model": m, "usage_count": v})
     stats.sort(key=lambda x: x["usage_count"], reverse=True)
     return stats
+
+_manual_order_cache: list[str] | None = None
+_manual_order_cache_ts: float = 0
+
+def save_manual_order(db_url: str, order: list[str]) -> None:
+    """Saves the manual model order to the database."""
+    global _manual_order_cache, _manual_order_cache_ts
+    adapter = get_adapter(db_url)
+    try:
+        import json
+        adapter.execute("""
+            INSERT INTO config_keys (key_name, key_value)
+            VALUES (%s, %s)
+            ON CONFLICT (key_name)
+            DO UPDATE SET key_value = EXCLUDED.key_value
+        """, ('manual_model_order', json.dumps(order)))
+        adapter.commit()
+    finally:
+        adapter.close()
+    
+    _manual_order_cache = order
+    _manual_order_cache_ts = time.time()
+
+def get_manual_order(db_url: str, bypass_cache: bool = False) -> list[str]:
+    """Retrieves the manual model order from the database."""
+    global _manual_order_cache, _manual_order_cache_ts
+    if not bypass_cache and _manual_order_cache is not None and time.time() - _manual_order_cache_ts < 10:
+        return _manual_order_cache
+
+    adapter = get_adapter(db_url)
+    try:
+        row = adapter.fetchone("SELECT key_value FROM config_keys WHERE key_name = %s", ('manual_model_order',))
+        if row:
+            import json
+            data = json.loads(row[0])
+            order = [str(x) for x in data] if isinstance(data, list) else []
+        else:
+            order = []
+            
+        _manual_order_cache = order
+        _manual_order_cache_ts = time.time()
+        return order
+    except Exception:
+        return []
+    finally:
+        adapter.close()

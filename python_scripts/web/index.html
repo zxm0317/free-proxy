@@ -1735,9 +1735,9 @@ opencode run -m free-proxy/auto "Reply with exactly OK"</pre>
                     
                     const btnStyle = 'padding: 4px 8px; font-size: 12px; margin: 0 2px;';
                     const actionHtml = `
-                        <button class="btn btn-secondary" style="${btnStyle}" onclick="moveModel(${index}, 'top')" ${index === 0 ? 'disabled' : ''} title="置顶">🔝</button>
-                        <button class="btn btn-secondary" style="${btnStyle}" onclick="moveModel(${index}, 'up')" ${index === 0 ? 'disabled' : ''} title="上移">⬆️</button>
-                        <button class="btn btn-secondary" style="${btnStyle}" onclick="moveModel(${index}, 'down')" ${index === data.models.length - 1 ? 'disabled' : ''} title="下移">⬇️</button>
+                        <button class="btn btn-secondary" style="${btnStyle}" onclick="moveModel(${index}, 'top')" ${index === 0 ? 'disabled' : ''} title="置顶">置顶</button>
+                        <button class="btn btn-secondary" style="${btnStyle}" onclick="moveModel(${index}, 'up')" ${index === 0 ? 'disabled' : ''} title="上移">上移</button>
+                        <button class="btn btn-secondary" style="${btnStyle}" onclick="moveModel(${index}, 'down')" ${index === data.models.length - 1 ? 'disabled' : ''} title="下移">下移</button>
                     `;
                     
                     return `
