@@ -705,17 +705,14 @@
                 <div class="card-head">
                     <div>
                         <h2>5. 路由探针与排行 (Routing Status)</h2>
-                        <div class="subtle">配置 `free-proxy/auto` 的自定义回退顺序，以及查看自动路由健康状况（能力分数 > 健康状态）。一行一个模型 ID（例如 `github/gpt-4o`）。越靠上优先级越高。未在手动列表的模型会自动按能力与健康降级。</div>
+                        <div class="subtle">默认按照「能力 > 健康」排序。你可以点击表格右侧的按钮手动干预顺序，置顶、上移或下移。手动干预后将永久覆盖默认顺序，直到点击重置。</div>
                     </div>
                     <div style="display: flex; gap: 8px;">
-                        <button class="btn btn-secondary" id="saveManualOrderBtn">保存顺序</button>
+                        <button class="btn btn-ghost" id="resetOrderBtn">重置默认排序</button>
                         <button class="btn btn-secondary" onclick="fetchModelsStats()">刷新排行</button>
                     </div>
                 </div>
-                <div style="margin-top: 12px; margin-bottom: 12px;">
-                    <textarea class="textarea" id="manualOrderInput" rows="4" placeholder="在此输入自定义排序列表...&#10;github/gpt-4o&#10;gemini/gemini-2.0-flash"></textarea>
-                </div>
-                <div class="table-container" style="overflow-x: auto;">
+                <div class="table-container" style="overflow-x: auto; margin-top: 12px;">
                     <table style="width: 100%; border-collapse: collapse; text-align: left; background: #fff; border: 1px solid var(--line); border-radius: 8px;">
                         <thead>
                             <tr style="border-bottom: 1px solid var(--line); background: #f9f9f9;">
@@ -723,7 +720,8 @@
                                 <th style="padding: 12px; font-weight: 600;">Provider</th>
                                 <th style="padding: 12px; font-weight: 600;">模型 (Model)</th>
                                 <th style="padding: 12px; font-weight: 600;">状态</th>
-                                <th style="padding: 12px; font-weight: 600;">额度剩余 / 重置 (Rate Limit)</th>
+                                <th style="padding: 12px; font-weight: 600;">额度剩余 (Rate Limit)</th>
+                                <th style="padding: 12px; font-weight: 600; width: 140px; text-align: center;">操作</th>
                             </tr>
                         </thead>
                         <tbody id="modelsStatsBody">
@@ -1599,7 +1597,6 @@ opencode run -m free-proxy/auto "Reply with exactly OK"</pre>
             await ensureVisibleModels(forceModels);
             await fetchUsageStats();
             await fetchModelsStats();
-            await fetchManualOrder();
             setDiagnostics('status-info', [
                 '动作: 页面初始化',
                 `结果: 已加载 ${configuredProviders().length} 个已配置 provider`,
@@ -1607,45 +1604,69 @@ opencode run -m free-proxy/auto "Reply with exactly OK"</pre>
             ]);
         }
 
-        async function fetchManualOrder() {
-            try {
-                const res = await fetch('/api/manual-order');
-                const data = await res.json();
-                const input = document.getElementById('manualOrderInput');
-                if (input && data.order && data.order.length > 0) {
-                    input.value = data.order.join('\n');
-                }
-            } catch (err) {
-                console.error('fetchManualOrder error:', err);
-            }
-        }
-
-        document.getElementById('saveManualOrderBtn').addEventListener('click', async (event) => {
+        document.getElementById('resetOrderBtn').addEventListener('click', async (event) => {
             const btn = event.currentTarget;
             btn.disabled = true;
-            btn.textContent = '保存中...';
+            btn.textContent = '重置中...';
             try {
-                const input = document.getElementById('manualOrderInput');
-                const order = input.value.split('\n').map(s => s.trim()).filter(s => s.length > 0);
                 const res = await fetch('/api/manual-order', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ order })
+                    body: JSON.stringify({ order: [] })
                 });
                 if (res.ok) {
-                    showToast('保存成功');
+                    showToast('重置成功');
                     await fetchModelsStats();
                 } else {
-                    showToast('保存失败', 'error');
+                    showToast('重置失败', 'error');
                 }
             } catch (err) {
                 console.error(err);
-                showToast('保存失败', 'error');
+                showToast('重置失败', 'error');
             } finally {
                 btn.disabled = false;
-                btn.textContent = '保存顺序';
+                btn.textContent = '重置默认排序';
             }
         });
+
+        let currentModelsOrder = [];
+
+        window.moveModel = async function(index, direction) {
+            if (index < 0 || index >= currentModelsOrder.length) return;
+            let newOrder = [...currentModelsOrder];
+            const item = newOrder[index];
+            
+            if (direction === 'top') {
+                newOrder.splice(index, 1);
+                newOrder.unshift(item);
+            } else if (direction === 'up' && index > 0) {
+                newOrder.splice(index, 1);
+                newOrder.splice(index - 1, 0, item);
+            } else if (direction === 'down' && index < newOrder.length - 1) {
+                newOrder.splice(index, 1);
+                newOrder.splice(index + 1, 0, item);
+            } else {
+                return; // Cannot move
+            }
+            
+            try {
+                const orderStrings = newOrder.map(i => `${i.provider}/${i.model}`);
+                const res = await fetch('/api/manual-order', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ order: orderStrings })
+                });
+                if (res.ok) {
+                    showToast('排序已保存');
+                    await fetchModelsStats();
+                } else {
+                    showToast('保存排序失败', 'error');
+                }
+            } catch (err) {
+                console.error(err);
+                showToast('网络错误，保存失败', 'error');
+            }
+        };
 
         async function fetchUsageStats() {
             const tbody = document.getElementById('usageStatsBody');
@@ -1680,9 +1701,11 @@ opencode run -m free-proxy/auto "Reply with exactly OK"</pre>
                 if (!tbody) return;
                 
                 if (!data || !data.models || data.models.length === 0) {
-                    tbody.innerHTML = '<tr><td colspan="5" style="padding: 12px; text-align: center; color: var(--muted);">暂无模型排行数据</td></tr>';
+                    tbody.innerHTML = '<tr><td colspan="6" style="padding: 12px; text-align: center; color: var(--muted);">暂无模型排行数据</td></tr>';
                     return;
                 }
+                
+                currentModelsOrder = data.models;
                 
                 tbody.innerHTML = data.models.map((item, index) => {
                     const isHealthy = item.ok === true;
@@ -1707,6 +1730,13 @@ opencode run -m free-proxy/auto "Reply with exactly OK"</pre>
                         limitHtml = `<span style="font-size: 12px;">${parts.join(' | ')}</span>`;
                     }
                     
+                    const btnStyle = 'padding: 4px 8px; font-size: 12px; margin: 0 2px;';
+                    const actionHtml = `
+                        <button class="btn btn-secondary" style="${btnStyle}" onclick="moveModel(${index}, 'top')" ${index === 0 ? 'disabled' : ''} title="置顶">🔝</button>
+                        <button class="btn btn-secondary" style="${btnStyle}" onclick="moveModel(${index}, 'up')" ${index === 0 ? 'disabled' : ''} title="上移">⬆️</button>
+                        <button class="btn btn-secondary" style="${btnStyle}" onclick="moveModel(${index}, 'down')" ${index === data.models.length - 1 ? 'disabled' : ''} title="下移">⬇️</button>
+                    `;
+                    
                     return `
                         <tr style="border-bottom: 1px solid var(--line);">
                             <td style="padding: 12px; font-weight: 500;">#${index + 1}</td>
@@ -1714,6 +1744,7 @@ opencode run -m free-proxy/auto "Reply with exactly OK"</pre>
                             <td style="padding: 12px; font-family: monospace;">${escapeHtml(item.model)}</td>
                             <td style="padding: 12px;">${statusHtml}</td>
                             <td style="padding: 12px;">${limitHtml}</td>
+                            <td style="padding: 12px; text-align: center;">${actionHtml}</td>
                         </tr>
                     `;
                 }).join('');
