@@ -82,6 +82,16 @@ def resolve_model_request(
 
     raise ValueError('no configured providers found, please save at least one API key first')
 
+def _get_manual_order() -> list[str]:
+    import json
+    try:
+        with open('/tmp/manual_model_order.json', 'r', encoding='utf-8') as f:
+            data = json.load(f)
+            if isinstance(data, list):
+                return [str(x) for x in data]
+    except Exception:
+        pass
+    return []
 
 def resolve_alias_candidates(
     alias: AliasName,
@@ -97,18 +107,28 @@ def resolve_alias_candidates(
 
     snapshot = health or {}
     timestamp = int(time.time()) if now_ts is None else now_ts
-
-    ranked: list[tuple[int, int, str, str]] = []
+    manual_order = _get_manual_order()
+    from .provider_catalog import get_model_capabilities
+    
+    ranked: list[tuple[int, int, int, int, str, str]] = []
     for provider_rank, provider_name in enumerate(configured):
         hints = get_provider_model_hints(provider_name)
         for model_id in hints:
-            score = 0
-            entry = snapshot.get(f'{provider_name}/{model_id}')
-            if isinstance(entry, dict):
-                score = _health_score(entry, timestamp, ttl_seconds)
-            ranked.append((score, -provider_rank, provider_name, model_id))
+            key = f'{provider_name}/{model_id}'
+            
+            manual_score = 0
+            if key in manual_order:
+                manual_score = 1000000 - manual_order.index(key) * 100
+                
+            caps = get_model_capabilities(provider_name, model_id)
+            capability_score = int(caps.get('default_output_tokens', 0) or 0)
+            
+            entry = snapshot.get(key)
+            health_score = _health_score(entry, timestamp, ttl_seconds) if isinstance(entry, dict) else 0
+            
+            ranked.append((manual_score, capability_score, health_score, -provider_rank, provider_name, model_id))
 
-    for _, _, provider_name, model_id in sorted(ranked, key=lambda item: (item[0], item[1]), reverse=True):
+    for _, _, _, _, provider_name, model_id in sorted(ranked, key=lambda item: (item[0], item[1], item[2], item[3]), reverse=True):
         pair = (provider_name, model_id)
         if pair not in ordered:
             ordered.append(pair)
@@ -129,16 +149,28 @@ def build_auto_candidates(*, requested_model: str | None, configured: list[str],
     if requested_model and '/' in requested_model:
         provider_name, model_id = requested_model.split('/', 1)
         push(provider_name, model_id, 'user_requested')
-
-    ranked: list[tuple[int, int, str, str]] = []
+    manual_order = _get_manual_order()
+    from .provider_catalog import get_model_capabilities
+    
+    ranked: list[tuple[int, int, int, int, str, str]] = []
     for provider_rank, provider_name in enumerate(configured):
         hints = get_provider_model_hints(provider_name)
         for model_id in hints:
-            entry = health.get(f'{provider_name}/{model_id}')
-            score = _health_score(entry, now_ts, ttl_seconds) if isinstance(entry, dict) else 0
-            ranked.append((score, -provider_rank, provider_name, model_id))
+            key = f'{provider_name}/{model_id}'
+            
+            manual_score = 0
+            if key in manual_order:
+                manual_score = 1000000 - manual_order.index(key) * 100
+                
+            caps = get_model_capabilities(provider_name, model_id)
+            capability_score = int(caps.get('default_output_tokens', 0) or 0)
+            
+            entry = health.get(key)
+            health_score = _health_score(entry, now_ts, ttl_seconds) if isinstance(entry, dict) else 0
+            
+            ranked.append((manual_score, capability_score, health_score, -provider_rank, provider_name, model_id))
 
-    for _, _, provider_name, model_id in sorted(ranked, key=lambda item: (item[0], item[1]), reverse=True):
+    for _, _, _, _, provider_name, model_id in sorted(ranked, key=lambda item: (item[0], item[1], item[2], item[3]), reverse=True):
         push(provider_name, model_id, 'health_boosted' if isinstance(health.get(f'{provider_name}/{model_id}'), dict) else 'provider_default')
 
     return ordered

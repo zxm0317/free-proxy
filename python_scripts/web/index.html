@@ -705,11 +705,17 @@
                 <div class="card-head">
                     <div>
                         <h2>5. 路由探针与排行 (Routing Status)</h2>
-                        <div class="subtle">展示 `free-proxy/auto` 在后端的实时大模型降级接力顺序与最新健康状态，以及抓取到的剩余额度。</div>
+                        <div class="subtle">配置 `free-proxy/auto` 的自定义回退顺序，以及查看自动路由健康状况（能力分数 > 健康状态）。一行一个模型 ID（例如 `github/gpt-4o`）。越靠上优先级越高。未在手动列表的模型会自动按能力与健康降级。</div>
                     </div>
-                    <button class="btn btn-secondary" onclick="fetchModelsStats()">刷新排行</button>
+                    <div style="display: flex; gap: 8px;">
+                        <button class="btn btn-secondary" id="saveManualOrderBtn">保存顺序</button>
+                        <button class="btn btn-secondary" onclick="fetchModelsStats()">刷新排行</button>
+                    </div>
                 </div>
-                <div class="table-container" style="margin-top: 12px; overflow-x: auto;">
+                <div style="margin-top: 12px; margin-bottom: 12px;">
+                    <textarea class="textarea" id="manualOrderInput" rows="4" placeholder="在此输入自定义排序列表...&#10;github/gpt-4o&#10;gemini/gemini-2.0-flash"></textarea>
+                </div>
+                <div class="table-container" style="overflow-x: auto;">
                     <table style="width: 100%; border-collapse: collapse; text-align: left; background: #fff; border: 1px solid var(--line); border-radius: 8px;">
                         <thead>
                             <tr style="border-bottom: 1px solid var(--line); background: #f9f9f9;">
@@ -1593,12 +1599,53 @@ opencode run -m free-proxy/auto "Reply with exactly OK"</pre>
             await ensureVisibleModels(forceModels);
             await fetchUsageStats();
             await fetchModelsStats();
+            await fetchManualOrder();
             setDiagnostics('status-info', [
                 '动作: 页面初始化',
                 `结果: 已加载 ${configuredProviders().length} 个已配置 provider`,
                 configuredProviders().length ? '建议: 先点“验证”，再选择推荐模型做探测或聊天验证。' : '建议: 先配置至少一个 provider 的 API Key。',
             ]);
         }
+
+        async function fetchManualOrder() {
+            try {
+                const res = await fetch('/api/manual-order');
+                const data = await res.json();
+                const input = document.getElementById('manualOrderInput');
+                if (input && data.order && data.order.length > 0) {
+                    input.value = data.order.join('\n');
+                }
+            } catch (err) {
+                console.error('fetchManualOrder error:', err);
+            }
+        }
+
+        document.getElementById('saveManualOrderBtn').addEventListener('click', async (event) => {
+            const btn = event.currentTarget;
+            btn.disabled = true;
+            btn.textContent = '保存中...';
+            try {
+                const input = document.getElementById('manualOrderInput');
+                const order = input.value.split('\n').map(s => s.trim()).filter(s => s.length > 0);
+                const res = await fetch('/api/manual-order', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ order })
+                });
+                if (res.ok) {
+                    showToast('保存成功');
+                    await fetchModelsStats();
+                } else {
+                    showToast('保存失败', 'error');
+                }
+            } catch (err) {
+                console.error(err);
+                showToast('保存失败', 'error');
+            } finally {
+                btn.disabled = false;
+                btn.textContent = '保存顺序';
+            }
+        });
 
         async function fetchUsageStats() {
             const tbody = document.getElementById('usageStatsBody');
