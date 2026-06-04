@@ -162,35 +162,48 @@ class OpenAIRelay:
         kept.extend(reversed(selected_tail))
         
         # FINAL SAFETY CHECK: ensure total length does not exceed policy.max_input_chars
-        # If it does, aggressively trim the last message.
         final_messages = kept or trimmed_messages[-1:]
         total_len = sum(cls._message_content_length(m) for m in final_messages)
-        if total_len > policy.max_input_chars and final_messages:
-            last_msg = final_messages[-1]
-            if isinstance(last_msg.get('content'), str):
-                excess = total_len - policy.max_input_chars
-                current_len = len(last_msg['content'])
-                if current_len > excess:
-                    new_content = last_msg['content'][:(current_len - excess - 50)] + '...[截断]'
-                    final_messages[-1] = dict(last_msg)
-                    final_messages[-1]['content'] = new_content
-            elif isinstance(last_msg.get('content'), list):
-                excess = total_len - policy.max_input_chars
-                blocks = list(last_msg['content'])
-                for i in range(len(blocks) - 1, -1, -1):
-                    block = blocks[i]
-                    if isinstance(block, dict) and block.get('type') == 'text' and isinstance(block.get('text'), str):
-                        text = block['text']
-                        if len(text) > excess:
-                            blocks[i] = dict(block)
-                            blocks[i]['text'] = text[:(len(text) - excess - 50)] + '...[截断]'
-                            break
-                        else:
-                            excess -= len(text)
-                            blocks[i] = dict(block)
-                            blocks[i]['text'] = '...[截断]'
-                final_messages[-1] = dict(last_msg)
-                final_messages[-1]['content'] = blocks
+        excess = total_len - policy.max_input_chars
+        
+        if excess > 0:
+            for i in range(len(final_messages) - 1, -1, -1):
+                msg = final_messages[i]
+                if excess <= 0:
+                    break
+                    
+                if isinstance(msg.get('content'), str):
+                    current_len = len(msg['content'])
+                    if current_len == 0:
+                        continue
+                    cut_amount = min(current_len, excess + 50)
+                    new_content = msg['content'][:max(0, current_len - cut_amount)]
+                    if new_content:
+                        new_content += '...[截断]'
+                    final_messages[i] = dict(msg)
+                    final_messages[i]['content'] = new_content
+                    excess -= (current_len - len(new_content))
+                elif isinstance(msg.get('content'), list):
+                    blocks = list(msg['content'])
+                    for j in range(len(blocks) - 1, -1, -1):
+                        block = blocks[j]
+                        if isinstance(block, dict) and block.get('type') == 'text' and isinstance(block.get('text'), str):
+                            text = block['text']
+                            current_len = len(text)
+                            if current_len == 0:
+                                continue
+                            cut_amount = min(current_len, excess + 50)
+                            new_text = text[:max(0, current_len - cut_amount)]
+                            if new_text:
+                                new_text += '...[截断]'
+                            blocks[j] = dict(block)
+                            blocks[j]['text'] = new_text
+                            excess -= (current_len - len(new_text))
+                            if excess <= 0:
+                                break
+                    final_messages[i] = dict(msg)
+                    final_messages[i]['content'] = blocks
+                    
         return final_messages
 
     def _payload_for_candidate(self, provider: str, model: str, request: ChatRequest) -> dict[str, object]:
