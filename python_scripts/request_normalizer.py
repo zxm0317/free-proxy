@@ -42,8 +42,8 @@ def normalize_chat_request(payload: dict[str, object]) -> ChatRequest:
     model = str(payload.get('model', '')).strip()
     if model in CODING_ALIASES:
         raise ValueError("model 'coding' is no longer supported. Use 'free-proxy/auto' instead.")
-    if model not in AUTO_ALIASES:
-        raise ValueError("model must be 'free-proxy/auto'")
+    if model not in AUTO_ALIASES and not model.endswith('/auto'):
+        raise ValueError("model must be 'free-proxy/auto' or end with '/auto'")
     requested_model = str(payload.get('requested_model', '')).strip() or None
     temperature = payload.get('temperature')
     return ChatRequest(
