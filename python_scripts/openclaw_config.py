@@ -114,7 +114,7 @@ def _ensure_free_proxy_provider(config: dict[str, Any], port: int, proxy_api_key
     providers[FREE_PROXY_PROVIDER_ID] = {
         'baseUrl': f'http://localhost:{port}/v1',
         'apiKey': proxy_api_key,
-        'api': 'openai',
+        'api': 'openai-completions',
         'models': [
             {'id': FREE_PROXY_MODEL_ID, 'name': FREE_PROXY_MODEL_ID},
         ],
