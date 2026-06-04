@@ -599,6 +599,50 @@ async def openai_chat_completions(request: Request):
     return JSONResponse(content=b'', status_code=result.status or 200)
 
 
+@app.post('/v1/completions')
+async def openai_legacy_completions(request: Request):
+    auth_res = await check_auth_openai(request)
+    if isinstance(auth_res, JSONResponse):
+        return auth_res
+    
+    payload, error_response = await _read_json_payload(request, openai=True)
+    if error_response is not None:
+        return error_response
+    print("DEBUG_PAYLOAD (legacy):", json.dumps(payload, ensure_ascii=False)[:1000], flush=True)
+    
+    # Translate legacy format to chat format
+    prompt = payload.get('prompt', '')
+    if isinstance(prompt, list):
+        prompt = ''.join(prompt)
+        
+    chat_payload = dict(payload)
+    chat_payload['messages'] = [{'role': 'user', 'content': prompt}]
+    
+    user_agent = request.headers.get('User-Agent', '')
+    client_hint = 'opencode' if 'opencode' in user_agent.lower() else 'openclaw' if 'openclaw' in user_agent.lower() else ''
+    try:
+        chat_payload['client_hint'] = client_hint
+        svc = get_service()
+        relay = svc.openai_relay()
+        req = relay.normalize(chat_payload)
+    except ValueError as exc:
+        error_code = 'model_deprecated' if 'no longer supported' in str(exc) else None
+        return JSONResponse(
+            {'error': {'message': str(exc), 'type': 'invalid_request_error', 'param': None, 'code': error_code}},
+            status_code=400,
+        )
+
+    result = await run_in_threadpool(relay.handle_chat, req)
+
+    if result.stream_chunks is not None:
+        return StreamingResponse(
+            _iter_chunks(result.stream_chunks),
+            media_type=result.headers.get('Content-Type', 'text/event-stream'),
+            headers={'Cache-Control': 'no-cache', 'Connection': 'keep-alive', 'X-Accel-Buffering': 'no'},
+        )
+    if result.body is not None:
+        return JSONResponse(content=json.loads(result.body), status_code=result.status or 200, headers=dict(result.headers))
+    return JSONResponse(content=b'', status_code=result.status or 200)
 def _iter_chunks(chunks):
     try:
         for chunk in chunks:
