@@ -174,6 +174,23 @@ class OpenAIRelay:
                     new_content = last_msg['content'][:(current_len - excess - 50)] + '...[截断]'
                     final_messages[-1] = dict(last_msg)
                     final_messages[-1]['content'] = new_content
+            elif isinstance(last_msg.get('content'), list):
+                excess = total_len - policy.max_input_chars
+                blocks = list(last_msg['content'])
+                for i in range(len(blocks) - 1, -1, -1):
+                    block = blocks[i]
+                    if isinstance(block, dict) and block.get('type') == 'text' and isinstance(block.get('text'), str):
+                        text = block['text']
+                        if len(text) > excess:
+                            blocks[i] = dict(block)
+                            blocks[i]['text'] = text[:(len(text) - excess - 50)] + '...[截断]'
+                            break
+                        else:
+                            excess -= len(text)
+                            blocks[i] = dict(block)
+                            blocks[i]['text'] = '...[截断]'
+                final_messages[-1] = dict(last_msg)
+                final_messages[-1]['content'] = blocks
         return final_messages
 
     def _payload_for_candidate(self, provider: str, model: str, request: ChatRequest) -> dict[str, object]:
