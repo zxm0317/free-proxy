@@ -355,32 +355,35 @@ class OpenAIRelay:
                                 try:
                                     parsed_json = json.loads(data_str)
                                     choices = parsed_json.get('choices', [])
-                                    if choices:
-                                        delta = choices[0].get('delta', {})
-                                        content = delta.get('content')
-                                        if content:
-                                            accumulated_content.append(content)
-                                            
-                                        finish_reason = choices[0].get('finish_reason')
-                                        if finish_reason == 'stop':
-                                            full_content = "".join(accumulated_content)
-                                            parsed_tc = _normalize_tool_calls(cand_provider, full_content)
-                                            if parsed_tc is not None:
-                                                choices[0]['finish_reason'] = 'tool_calls'
-                                                if 'delta' not in choices[0]:
-                                                    choices[0]['delta'] = {}
-                                                    
-                                                # In SSE streaming, tool_calls must have an 'index' field
-                                                stream_tool_calls = []
-                                                for i, tc in enumerate(parsed_tc.tool_calls):
-                                                    stc = dict(tc)
-                                                    stc['index'] = i
-                                                    stream_tool_calls.append(stc)
-                                                    
-                                                choices[0]['delta']['tool_calls'] = stream_tool_calls
-                                                rewritten = f"data: {json.dumps(parsed_json, ensure_ascii=False)}\n\n".encode('utf-8')
-                                                yield rewritten
-                                                continue
+                                    # Strict clients crash if choices is empty
+                                    if not choices:
+                                        continue
+                                        
+                                    delta = choices[0].get('delta', {})
+                                    content = delta.get('content')
+                                    if content:
+                                        accumulated_content.append(content)
+                                        
+                                    finish_reason = choices[0].get('finish_reason')
+                                    if finish_reason == 'stop':
+                                        full_content = "".join(accumulated_content)
+                                        parsed_tc = _normalize_tool_calls(cand_provider, full_content)
+                                        if parsed_tc is not None:
+                                            choices[0]['finish_reason'] = 'tool_calls'
+                                            if 'delta' not in choices[0]:
+                                                choices[0]['delta'] = {}
+                                                
+                                            # In SSE streaming, tool_calls must have an 'index' field
+                                            stream_tool_calls = []
+                                            for i, tc in enumerate(parsed_tc.tool_calls):
+                                                stc = dict(tc)
+                                                stc['index'] = i
+                                                stream_tool_calls.append(stc)
+                                                
+                                            choices[0]['delta']['tool_calls'] = stream_tool_calls
+                                            rewritten = f"data: {json.dumps(parsed_json, ensure_ascii=False)}\n\n".encode('utf-8')
+                                            yield rewritten
+                                            continue
                                 except Exception:
                                     pass
                                 yield chunk
