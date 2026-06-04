@@ -12,7 +12,7 @@ class TokenPolicy:
 
 
 DEFAULT_POLICY = {
-    'github': TokenPolicy(max_input_chars=64000, reserve_output_tokens=4096),
+    'github': TokenPolicy(max_input_chars=12000, reserve_output_tokens=4096),
     'groq': TokenPolicy(max_input_chars=64000, reserve_output_tokens=4096),
     'openrouter': TokenPolicy(max_input_chars=128000, reserve_output_tokens=4096),
 
