@@ -563,13 +563,24 @@ async def legacy_chat_completions(request: Request):
 
 @app.post('/v1/chat/completions')
 async def openai_chat_completions(request: Request):
+    # Need to read body manually for logging before auth
+    body_bytes = await request.body()
+    # Mock request.body() so subsequent calls still work
+    async def _mock_receive():
+        return {"type": "http.request", "body": body_bytes}
+    request._receive = _mock_receive
+    
     auth_res = await check_auth_openai(request)
     if isinstance(auth_res, JSONResponse):
+        await _log_debug_request(request, body_bytes, f"Auth Failed: {auth_res.body}")
         return auth_res
     
     payload, error_response = await _read_json_payload(request, openai=True)
     if error_response is not None:
+        await _log_debug_request(request, body_bytes, f"JSON Parse Failed: {error_response.body}")
         return error_response
+        
+    await _log_debug_request(request, body_bytes, "Success /v1/chat/completions")
     print("DEBUG_PAYLOAD:", json.dumps(payload, ensure_ascii=False)[:1000], flush=True)
     user_agent = request.headers.get('User-Agent', '')
     client_hint = 'opencode' if 'opencode' in user_agent.lower() else 'openclaw' if 'openclaw' in user_agent.lower() else ''
@@ -596,16 +607,49 @@ async def openai_chat_completions(request: Request):
         )
     if result.body is not None:
         return JSONResponse(content=json.loads(result.body), status_code=result.status or 200, headers=dict(result.headers))
-    return JSONResponse(content=b'', status_code=result.status or 200)
+        return JSONResponse(content=b'', status_code=result.status or 200)
+
+async def _log_debug_request(request: Request, body: bytes, error_reason: str = ''):
+    try:
+        svc = get_service()
+        headers_str = json.dumps(dict(request.headers), ensure_ascii=False)
+        body_str = body.decode('utf-8', errors='replace')
+        async def insert_log():
+            import psycopg
+            try:
+                with psycopg.connect(svc.db_url) as conn:
+                    with conn.cursor() as cur:
+                        cur.execute(
+                            "INSERT INTO debug_requests (headers, body, error_reason) VALUES (%s, %s, %s)",
+                            (headers_str, body_str, error_reason)
+                        )
+                    conn.commit()
+            except Exception as e:
+                print(f"Failed to log debug request: {e}")
+        import asyncio
+        asyncio.create_task(insert_log())
+    except Exception:
+        pass
 
 
 @app.post('/v1/completions')
 async def openai_legacy_completions(request: Request):
+    body_bytes = await request.body()
+    async def _mock_receive():
+        return {"type": "http.request", "body": body_bytes}
+    request._receive = _mock_receive
+    
     auth_res = await check_auth_openai(request)
     if isinstance(auth_res, JSONResponse):
+        await _log_debug_request(request, body_bytes, f"Auth Failed: {auth_res.body}")
         return auth_res
     
     payload, error_response = await _read_json_payload(request, openai=True)
+    if error_response is not None:
+        await _log_debug_request(request, body_bytes, f"JSON Parse Failed: {error_response.body}")
+        return error_response
+    
+    await _log_debug_request(request, body_bytes, "Success /v1/completions")
     if error_response is not None:
         return error_response
     print("DEBUG_PAYLOAD (legacy):", json.dumps(payload, ensure_ascii=False)[:1000], flush=True)
