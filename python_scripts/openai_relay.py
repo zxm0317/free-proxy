@@ -295,6 +295,7 @@ class OpenAIRelay:
         listed_loaded: set[str] = set()
         index = 0
         route_build_ms = int((time.time() - overall_start) * 1000)
+        error_details = []
         
         while index < len(candidates):
             candidate = candidates[index]
@@ -308,7 +309,9 @@ class OpenAIRelay:
             try:
                 adapter_response = self._adapter_response(candidate.provider, candidate.model, request)
             except ProviderError as exc:
-                failure = classify_error(0, str(exc))
+                error_msg = str(exc)
+                error_details.append(f"{candidate.provider}/{candidate.model}: {error_msg[:100]}")
+                failure = classify_error(0, error_msg)
                 self._record_health(candidate.provider, candidate.model, False, failure.category)
                 if candidate.provider not in listed_loaded:
                     listed_loaded.add(candidate.provider)
@@ -438,6 +441,7 @@ class OpenAIRelay:
             if not body_bytes and adapter_response.stream is not None:
                 body_bytes = b''.join(adapter_response.stream)
             failure = classify_error(adapter_response.status, body_bytes.decode('utf-8', errors='ignore'))
+            error_details.append(f"{candidate.provider}/{candidate.model} [HTTP {adapter_response.status}]: {failure.message[:200]}")
             if self.debug_log:
                 self.debug_log('upstream_error_details', provider=candidate.provider, model=candidate.model, status=adapter_response.status, raw_body=body_bytes.decode('utf-8', errors='ignore'))
             
@@ -452,10 +456,15 @@ class OpenAIRelay:
             decision = decide_next_action(FallbackContext(index, same_provider_attempts), RelayAttemptResult(False, candidate.provider, candidate.model, failure.category, adapter_response.status, None, failure.message))
             if decision.action == 'stop':
                 break
+        
+        detail_msg = "all candidates failed"
+        if error_details:
+            detail_msg += ". Details: " + " | ".join(error_details)
+            
         error_body = json.dumps(
             {
                 'error': {
-                    'message': 'all candidates failed',
+                    'message': detail_msg,
                     'type': 'server_error',
                     'param': None,
                     'code': '502',
