@@ -160,7 +160,21 @@ class OpenAIRelay:
             kept.append(system_prefix[0])
 
         kept.extend(reversed(selected_tail))
-        return kept or trimmed_messages[-1:]
+        
+        # FINAL SAFETY CHECK: ensure total length does not exceed policy.max_input_chars
+        # If it does, aggressively trim the last message.
+        final_messages = kept or trimmed_messages[-1:]
+        total_len = sum(cls._message_content_length(m) for m in final_messages)
+        if total_len > policy.max_input_chars and final_messages:
+            last_msg = final_messages[-1]
+            if isinstance(last_msg.get('content'), str):
+                excess = total_len - policy.max_input_chars
+                current_len = len(last_msg['content'])
+                if current_len > excess:
+                    new_content = last_msg['content'][:(current_len - excess - 50)] + '...[截断]'
+                    final_messages[-1] = dict(last_msg)
+                    final_messages[-1]['content'] = new_content
+        return final_messages
 
     def _payload_for_candidate(self, provider: str, model: str, request: ChatRequest) -> dict[str, object]:
         payload = dict(request.raw_payload)
