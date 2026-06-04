@@ -225,6 +225,14 @@ class OpenAIRelay:
             payload.pop('max_completion_tokens', None)
         else:
             payload['max_tokens'] = final_max
+            
+        # VERY IMPORTANT: If Hermes sends 60+ tools, the tools JSON alone can exceed 20k characters.
+        # GitHub Copilot's 8192 token window immediately throws 413 Payload Too Large.
+        # We strip tools for github to prove if this is the cause of the 413.
+        if provider == 'github':
+            payload.pop('tools', None)
+            payload.pop('tool_choice', None)
+            
         return payload
 
     def _adapter_response(self, provider: str, model: str, request: ChatRequest):
