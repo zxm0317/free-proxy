@@ -9,6 +9,7 @@ from pathlib import Path
 
 import httpx
 from fastapi import Depends, FastAPI, HTTPException, Request, Security
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse, RedirectResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from fastapi.staticfiles import StaticFiles
@@ -25,6 +26,13 @@ logger = logging.getLogger('free-proxy')
 
 app = FastAPI(title='free-proxy')
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 _web_root = Path(__file__).resolve().parent / 'web'
 if _web_root.exists() and _web_root.is_dir():
     app.mount('/web', StaticFiles(directory=str(_web_root)), name='web')
@@ -63,15 +71,21 @@ def startup_event():
 
 _security = HTTPBearer(auto_error=False)
 
-async def check_auth(credentials: HTTPAuthorizationCredentials | None = Security(_security)) -> str:
+async def check_auth_openai(request: Request) -> str | JSONResponse:
     svc = get_service()
     expected_key = svc.get_proxy_key()
     if not expected_key:
-        raise HTTPException(status_code=401, detail='Proxy API Key is not configured. Please generate one in the UI first.')
-    if not credentials or credentials.scheme != 'Bearer' or credentials.credentials != expected_key:
-        raise HTTPException(status_code=401, detail='Invalid Proxy API Key')
-    return credentials.credentials
-
+        return JSONResponse(
+            {'error': {'message': 'Proxy API Key is not configured. Please generate one in the UI first.', 'type': 'invalid_request_error', 'param': None, 'code': 'invalid_api_key'}},
+            status_code=401,
+        )
+    auth_header = request.headers.get('Authorization', '')
+    if not auth_header.startswith('Bearer ') or auth_header[7:] != expected_key:
+        return JSONResponse(
+            {'error': {'message': 'Invalid Proxy API Key', 'type': 'invalid_request_error', 'param': None, 'code': 'invalid_api_key'}},
+            status_code=401,
+        )
+    return auth_header[7:]
 def check_admin_auth(request: Request) -> str:
     admin_pwd = get_service().get_admin_password()
     token = request.cookies.get('adminToken')
@@ -337,7 +351,10 @@ async def configure_openclaw(request: Request):
         port = int(raw_port)
     except ValueError:
         port = settings.port
-    result = configure_openclaw_model(mode, port=port)
+    proxy_api_key = svc.get_proxy_key()
+    if not proxy_api_key:
+        return JSONResponse({'success': False, 'error': 'Please generate a Proxy API Key first'}, status_code=400)
+    result = configure_openclaw_model(mode, port=port, proxy_api_key=proxy_api_key)
     if not result.get('success'):
         return JSONResponse(result, status_code=400)
     message = '已设为 OpenClaw 默认模型' if mode == 'default' else '已加入 OpenClaw 备用模型'
@@ -356,7 +373,10 @@ async def configure_opencode(request: Request):
         port = int(raw_port)
     except ValueError:
         port = settings.port
-    result = configure_opencode_provider(port=port)
+    proxy_api_key = svc.get_proxy_key()
+    if not proxy_api_key:
+        return JSONResponse({'success': False, 'error': 'Please generate a Proxy API Key first'}, status_code=400)
+    result = configure_opencode_provider(port=port, proxy_api_key=proxy_api_key)
     if not result.get('success'):
         return JSONResponse(result, status_code=400)
     return {'success': True, 'backup': result.get('backup'), 'message': '已写入 Opencode free-proxy provider'}
@@ -541,8 +561,12 @@ async def legacy_chat_completions(request: Request):
     }, status_code=400)
 
 
-@app.post('/v1/chat/completions', dependencies=[Depends(check_auth)])
+@app.post('/v1/chat/completions')
 async def openai_chat_completions(request: Request):
+    auth_res = await check_auth_openai(request)
+    if isinstance(auth_res, JSONResponse):
+        return auth_res
+    
     payload, error_response = await _read_json_payload(request, openai=True)
     if error_response is not None:
         return error_response
