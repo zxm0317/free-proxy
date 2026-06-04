@@ -172,7 +172,15 @@ class OpenAIRelay:
         payload['messages'] = self._trim_messages_for_provider(provider, request.messages)
         default_output = model_default_output_tokens(provider, model, response_token_budget(provider))
         requested_output = request.max_output_tokens if isinstance(request.max_output_tokens, int) and request.max_output_tokens > 0 else default_output
-        payload['max_tokens'] = min(requested_output, default_output)
+        final_max = min(requested_output, default_output)
+        # If max_tokens is very large, some strict providers (like GitHub Copilot) will throw HTTP 413
+        # if prompt + max_tokens exceeds the hard limit. Popping max_tokens allows the provider 
+        # to dynamically fill the remaining context window without rejecting the request.
+        if final_max > 2048 and provider in ('github', 'gemini'):
+            payload.pop('max_tokens', None)
+            payload.pop('max_completion_tokens', None)
+        else:
+            payload['max_tokens'] = final_max
         return payload
 
     def _adapter_response(self, provider: str, model: str, request: ChatRequest):
