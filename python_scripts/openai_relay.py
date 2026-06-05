@@ -39,6 +39,7 @@ class OpenAIRelay:
         debug_log=None,
         usage_incrementer=None,
         manual_order_loader=None,
+        disabled_models_loader=None,
     ) -> None:
         self.adapter_factory = adapter_factory
         self.health_loader = health_loader
@@ -49,6 +50,7 @@ class OpenAIRelay:
         self.debug_log = debug_log
         self.usage_incrementer = usage_incrementer
         self.manual_order_loader = manual_order_loader
+        self.disabled_models_loader = disabled_models_loader
 
     def normalize(self, payload: dict[str, object]) -> ChatRequest:
         return normalize_chat_request(payload)
@@ -331,6 +333,10 @@ class OpenAIRelay:
         manual_order = []
         if self.manual_order_loader:
             manual_order = self.manual_order_loader()
+        disabled_models = []
+        if callable(self.disabled_models_loader):
+            disabled_models = self.disabled_models_loader()
+
         candidates = self._prioritize_interactive_clients(
             build_auto_candidates(
                 requested_model=requested_model,
@@ -339,6 +345,7 @@ class OpenAIRelay:
                 now_ts=int(time.time()),
                 ttl_seconds=self.health_ttl_seconds,
                 manual_order=manual_order,
+                disabled_models=disabled_models,
             ),
             request,
         )
@@ -450,13 +457,26 @@ class OpenAIRelay:
                                 self.debug_log('route_timing_total', total_ms=total_ms)
                     return RelayResponse(
                         status=adapter_response.status,
-                        headers={'Content-Type': 'text/event-stream; charset=utf-8'},
+                        headers={
+                            'Content-Type': 'text/event-stream; charset=utf-8',
+                            'X-Routed-Via': f"{candidate.provider}/{candidate.model}",
+                            'X-Fallback-Attempts': str(index - 1)
+                        },
                         body=None,
                         stream_chunks=_timed_stream(adapter_response.stream, start_time, overall_start, headers_ms, candidate.provider)
                     )
 
                 if adapter_response.body is None:
-                    return RelayResponse(200, {'Content-Type': 'application/json; charset=utf-8'}, b'', None)
+                    return RelayResponse(
+                        200,
+                        {
+                            'Content-Type': 'application/json; charset=utf-8',
+                            'X-Routed-Via': f"{candidate.provider}/{candidate.model}",
+                            'X-Fallback-Attempts': str(index - 1)
+                        },
+                        b'',
+                        None
+                    )
                 resp = normalize_provider_response(
                     provider=candidate.provider,
                     model=candidate.model,
@@ -483,9 +503,24 @@ class OpenAIRelay:
                                 self.debug_log('route_timing_total', total_ms=total_ms)
                     resp = RelayResponse(
                         status=resp.status,
-                        headers=resp.headers,
+                        headers={
+                            **resp.headers,
+                            'X-Routed-Via': f"{candidate.provider}/{candidate.model}",
+                            'X-Fallback-Attempts': str(index - 1)
+                        },
                         body=resp.body,
                         stream_chunks=_timed_stream_local(resp.stream_chunks, start_time, overall_start, headers_ms)
+                    )
+                else:
+                    resp = RelayResponse(
+                        status=resp.status,
+                        headers={
+                            **resp.headers,
+                            'X-Routed-Via': f"{candidate.provider}/{candidate.model}",
+                            'X-Fallback-Attempts': str(index - 1)
+                        },
+                        body=resp.body,
+                        stream_chunks=None
                     )
                 return resp
                 

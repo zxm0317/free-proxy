@@ -259,22 +259,6 @@
             background: #fff;
             color: var(--text);
             font: inherit;
-            min-height: 44px;
-            box-sizing: border-box;
-            transition: all 0.2s ease;
-        }
-        
-        tr[draggable="true"] {
-            cursor: grab;
-            transition: background-color 0.2s;
-        }
-        
-        tr[draggable="true"]:active {
-            cursor: grabbing;
-        }
-        
-        tr[draggable="true"]:hover {
-            background-color: #f8f9fa !important;
         }
 
         .field:focus,
@@ -603,307 +587,30 @@
                 width: 100%;
             }
         }
-
-        /* Progress Bar Styles */
-        .axis-bar-container {
-            display: flex;
-            align-items: center;
-            gap: 6px;
-            width: 120px;
-        }
-        .axis-bar {
-            height: 6px;
-            width: 70px;
-            border-radius: 9999px;
-            background-color: var(--line);
-            overflow: hidden;
-        }
-        .axis-bar-inner {
-            height: 100%;
-            border-radius: 9999px;
-            transition: width 0.3s ease;
-        }
-        .axis-val {
-            font-family: monospace;
-            font-size: 11px;
-            color: var(--muted);
-            width: 30px;
-            text-align: right;
-        }
-
-        /* Switch Styles (iOS toggle) */
-        .switch {
-            position: relative;
-            display: inline-block;
-            width: 36px;
-            height: 20px;
-        }
-        .switch input {
-            opacity: 0;
-            width: 0;
-            height: 0;
-        }
-        .slider {
-            position: absolute;
-            cursor: pointer;
-            top: 0; left: 0; right: 0; bottom: 0;
-            background-color: #ccc;
-            transition: .4s;
-            border-radius: 34px;
-        }
-        .slider:before {
-            position: absolute;
-            content: "";
-            height: 14px;
-            width: 14px;
-            left: 3px;
-            bottom: 3px;
-            background-color: white;
-            transition: .4s;
-            border-radius: 50%;
-        }
-        input:checked + .slider {
-            background-color: #22c55e;
-        }
-        input:checked + .slider:before {
-            transform: translateX(16px);
-        }
-
-        /* Tag Styles */
-        .badge-tag {
-            display: inline-flex;
-            align-items: center;
-            font-size: 10px;
-            padding: 2px 6px;
-            border-radius: 999px;
-            font-weight: 500;
-            margin-left: 4px;
-        }
-        .tag-vision {
-            background-color: rgba(6, 182, 212, 0.1);
-            color: rgb(8, 145, 178);
-        }
-        .tag-tools {
-            background-color: rgba(139, 92, 246, 0.1);
-            color: rgb(109, 40, 217);
-        }
-        .tag-penalty {
-            color: #d5843f;
-            font-weight: 600;
-        }
-        .tag-obs {
-            color: var(--muted);
-            background-color: #f1f3f0;
-            opacity: 0.8;
-        }
-
-        /* Strategy Tabs */
-        .strategy-tabs {
-            display: inline-flex;
-            gap: 4px;
-            background: #f1f3f0;
-            padding: 4px;
-            border-radius: 12px;
-            border: 1px solid var(--line);
-            margin-bottom: 12px;
-        }
-        .strategy-btn {
-            border: none;
-            outline: none;
-            background: transparent;
-            padding: 6px 12px;
-            font-size: 12px;
-            font-weight: 500;
-            border-radius: 8px;
-            cursor: pointer;
-            color: var(--muted);
-            transition: all 0.2s ease;
-        }
-        .strategy-btn:hover {
-            color: var(--text);
-        }
-        .strategy-btn.active {
-            background: #182018;
-            color: #fffdfa;
-        }
-
-        /* Budget Card Styles */
-        .budget-card {
-            border-radius: 24px;
-            border: 1px solid var(--line);
-            background: #ffffff;
-            padding: 20px;
-            margin-bottom: 24px;
-        }
-        .budget-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: baseline;
-            margin-bottom: 12px;
-        }
-        .budget-title {
-            font-size: 14px;
-            font-weight: 600;
-            color: var(--text);
-        }
-        .budget-status {
-            font-size: 12px;
-            color: var(--muted);
-        }
-        .budget-progress-bar {
-            display: flex;
-            height: 10px;
-            border-radius: 9999px;
-            background-color: var(--line);
-            overflow: hidden;
-            margin-bottom: 16px;
-        }
-        .budget-progress-segment {
-            height: 100%;
-        }
-        .budget-legend {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-            gap: 12px;
-            font-size: 12px;
-        }
-        .legend-item {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-        .legend-dot {
-            width: 8px;
-            height: 8px;
-            border-radius: 2px;
-            flex-shrink: 0;
-        }
-        
-        .tab-pane { display: none; animation: fadeIn 0.3s ease; }
-        .tab-pane.active { display: block; }
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(10px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-        /* Top Navigation Bar */
-        .top-nav {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            height: 60px;
-            padding: 0 24px;
-            background: rgba(255, 255, 255, 0.8);
-            backdrop-filter: blur(8px);
-            border-bottom: 1px solid var(--line);
-            position: sticky;
-            top: 0;
-            z-index: 100;
-        }
-
-        .nav-logo {
-            font-weight: 700;
-            font-size: 15px;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            color: var(--text);
-        }
-
-        .nav-logo-dot {
-            width: 8px;
-            height: 8px;
-            background-color: var(--text);
-            border-radius: 50%;
-        }
-
-        .nav-links {
-            display: flex;
-            gap: 32px;
-            height: 100%;
-        }
-
-        .nav-link {
-            text-decoration: none;
-            color: var(--muted);
-            font-size: 14px;
-            font-weight: 500;
-            display: flex;
-            align-items: center;
-            padding: 0;
-            position: relative;
-            transition: color 0.2s ease;
-        }
-
-        .nav-link:hover {
-            color: var(--text);
-        }
-
-        .nav-link.active {
-            color: var(--text);
-        }
-
-        .nav-link.active::after {
-            content: '';
-            position: absolute;
-            bottom: -1px;
-            left: 0;
-            right: 0;
-            height: 2px;
-            background-color: var(--text);
-        }
-
-        .nav-actions {
-            display: flex;
-            gap: 16px;
-            align-items: center;
-        }
-
-        .btn-icon {
-            background: transparent;
-            border: none;
-            cursor: pointer;
-            color: var(--text);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            padding: 6px;
-            border-radius: 6px;
-            transition: background 0.2s ease;
-            font-family: inherit;
-        }
-
-        .btn-icon:hover {
-            background: rgba(0, 0, 0, 0.05);
-        }
     </style>
 </head>
 
 <body>
-    <nav class="top-nav">
-        <div class="nav-logo">
-            <span class="nav-logo-dot"></span> FreeLLMAPI
-        </div>
-        <div class="nav-links">
-            <a href="#models" class="nav-link active">模型</a>
-            <a href="#playground" class="nav-link">操场</a>
-            <a href="#keys" class="nav-link">钥匙</a>
-            <a href="#analysis" class="nav-link">分析</a>
-        </div>
-        <div class="nav-actions">
-            <button class="btn-icon" id="themeToggleBtn" title="切换模式">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
-                </svg>
-            </button>
-            <button class="btn-icon" onclick="logout()" title="登出" style="font-size: 13px; font-weight: 500;">登出</button>
-        </div>
-    </nav>
     <div class="shell">
-
+        <section class="hero">
+            <div class="hero-top">
+                <div>
+                    <h1>free-proxy 控制台</h1>
+                    <p>先配置 provider，再选择推荐模型，最后直接验证真实调用结果。</p>
+                </div>
+                <div style="display: flex; gap: 8px;">
+                    <button class="btn btn-accent" id="reloadPageBtn">刷新状态</button>
+                    <button class="btn btn-secondary" onclick="logout()">退出登录</button>
+                </div>
+            </div>
+            <div class="hero-copy">
+                <div class="hero-chip">1. 保存并验证 provider key</div>
+                <div class="hero-chip">2. 选择推荐模型</div>
+                <div class="hero-chip">3. 直接探测和聊天验证</div>
+            </div>
+        </section>
 
         <div class="page-flow">
-            <!-- TAB: KEYS -->
-            <div id="pane-keys" class="tab-pane">
             <section class="card" style="margin-bottom: 24px;">
                 <div class="card-head">
                     <div>
@@ -924,156 +631,51 @@
                         <h2>1. Provider 配置</h2>
                         <div class="subtle">保存 Key 后直接点验证。验证会发起真实请求，不只是检查模型列表。</div>
                     </div>
-                    <div style="display: flex; gap: 8px; align-items: center;">
-                        <select class="select" id="addProviderSelect" style="min-width: 180px;"></select>
-                        <button class="btn btn-primary" onclick="addNewProvider()">添加 Provider</button>
-                    </div>
                 </div>
                 <div class="provider-grid" id="providerGrid"></div>
             </section>
-            </div>
 
-
-            <!-- TAB: MODELS -->
-            <div id="pane-models" class="tab-pane active">
-            <!-- Removed workbench wrapper for tabs -->
-
-
-            <section class="card" id="routingStatusSection" style="padding: 24px; background: transparent; border: none; box-shadow: none;">
-                <!-- Header Title -->
-                <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 24px;">
-                    <div>
-                        <h2 style="font-size: 24px; font-weight: 700; margin-bottom: 8px; color: var(--text);">模型</h2>
-                        <div style="font-size: 14px; color: var(--muted); line-height: 1.5; max-width: 800px;">
-                            选择路由策略。在手动模式下，您可以拖动来设置顺序；其他策略则根据可靠性、速度和智能性等实时评分进行路由。
+            <section class="workbench" aria-label="模型与测试工作区">
+                <section class="card">
+                    <div class="card-head">
+                        <div>
+                            <h2>2. 模型浏览与推荐</h2>
+                            <div class="subtle">推荐模型优先展示。选中后右侧会直接带入当前验证模型。</div>
+                        </div>
+                        <div class="toolbar">
+                            <input class="field" id="modelSearch" placeholder="搜索 provider / model id">
+                            <button class="btn btn-secondary" id="refreshModelsBtn">刷新当前列表</button>
                         </div>
                     </div>
-                    <div style="display: inline-flex; gap: 4px; background: #f1f3f0; padding: 4px; border-radius: 12px; border: 1px solid var(--line);">
-                        <button class="strategy-btn active" style="padding: 6px 12px; border: none; background: #182018; color: #fffdfa; border-radius: 8px; font-size: 12px; font-weight: 500;">聊天模特</button>
-                        <button class="strategy-btn" style="padding: 6px 12px; border: none; background: transparent; color: var(--muted); border-radius: 8px; font-size: 12px; font-weight: 500; opacity: 0.5;">嵌入</button>
-                    </div>
-                </div>
+                    <div class="tabs" id="providerTabs"></div>
+                    <div class="panel-note" id="modelSummary">先配置至少一个 provider，再加载模型列表。</div>
+                    <div class="model-list" id="modelList" style="margin-top: 12px;"></div>
+                </section>
 
-                <!-- Monthly Token Budget Card -->
-                <div class="budget-card" id="budgetCard" style="display: none;">
-                    <div class="budget-header">
-                        <span class="budget-title">每月代币预算</span>
-                        <span class="budget-status" id="budgetText"></span>
-                    </div>
-                    <div class="budget-progress-bar" id="budgetProgressBar">
-                        <!-- segments inserted here -->
-                    </div>
-                    <div class="budget-legend" id="budgetLegend">
-                        <!-- legend items inserted here -->
-                    </div>
-                </div>
-
-                <!-- Routing Strategy Card -->
-                <div style="border-radius: 24px; border: 1px solid var(--line); background: #ffffff; padding: 20px; margin-bottom: 24px;">
-                    <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 12px;">
-                        <h3 style="font-size: 14px; font-weight: 600; margin: 0; color: var(--text);">路由策略</h3>
-                        <span id="strategyWeights" style="font-size: 12px; color: var(--muted); font-family: monospace;"></span>
-                    </div>
-                    <div class="strategy-tabs">
-                        <button class="strategy-btn" id="strat-priority" onclick="setStrategy('priority')">手动</button>
-                        <button class="strategy-btn active" id="strat-balanced" onclick="setStrategy('balanced')">均衡</button>
-                        <button class="strategy-btn" id="strat-smartest" onclick="setStrategy('smartest')">最聪明的</button>
-                        <button class="strategy-btn" id="strat-fastest" onclick="setStrategy('fastest')">最快</button>
-                        <button class="strategy-btn" id="strat-reliable" onclick="setStrategy('reliable')">最可靠</button>
-                    </div>
-                    <p id="strategyBlurb" style="margin-top: 8px; margin-bottom: 0; font-size: 12px; color: var(--muted);">
-                        均衡模式：可靠性主导 (50%)，速度与智力平分秋色 (各占 25%)。通用默认推荐。
-                    </p>
-                </div>
-
-                <!-- Table Container -->
-                <div class="table-container" style="overflow-x: auto; border: 1px solid var(--line); border-radius: 20px; background: #fff;">
-                    <table style="width: 100%; border-collapse: collapse; text-align: left; font-size: 13px;">
-                        <thead>
-                            <tr style="border-bottom: 1px solid var(--line); background: #ffffff; color: var(--muted);">
-                                <th style="padding: 12px 6px; font-weight: 500; width: 30px; text-align: center;"></th>
-                                <th style="padding: 12px 6px; font-weight: 500; width: 30px; text-align: center;">#</th>
-                                <th style="padding: 12px 12px; font-weight: 500;">模型</th>
-                                <th style="padding: 12px 12px; font-weight: 500; width: 130px;">
-                                    <span style="display: inline-flex; align-items: center; gap: 4px;"><span style="display: inline-block; width: 6px; height: 6px; border-radius: 50%; background-color: #22c55e;"></span>可靠性</span>
-                                </th>
-                                <th style="padding: 12px 12px; font-weight: 500; width: 130px;">
-                                    <span style="display: inline-flex; align-items: center; gap: 4px;"><span style="display: inline-block; width: 6px; height: 6px; border-radius: 50%; background-color: #3b82f6;"></span>速度</span>
-                                </th>
-                                <th style="padding: 12px 12px; font-weight: 500; width: 130px;">
-                                    <span style="display: inline-flex; align-items: center; gap: 4px;"><span style="display: inline-block; width: 6px; height: 6px; border-radius: 50%; background-color: #a855f7;"></span>智力</span>
-                                </th>
-                                <th style="padding: 12px 12px; font-weight: 500; width: 80px; text-align: center;">护栏</th>
-                                <th style="padding: 12px 12px; font-weight: 500; width: 80px; text-align: right;">分数</th>
-                                <th style="padding: 12px 12px; font-weight: 500; width: 60px; text-align: right;">在</th>
-                            </tr>
-                        </thead>
-                        <tbody id="modelsStatsBody">
-                            <tr><td colspan="9" style="padding: 12px; text-align: center; color: var(--muted);">正在加载实时排行...</td></tr>
-                        </tbody>
-                    </table>
-                </div>
-
-                <!-- Unconfigured / Hidden footer -->
-                <div id="unconfiguredFooter" style="margin-top: 12px; font-size: 12px; color: var(--muted); line-height: 1.6; padding-left: 4px;">
-                    <!-- Hidden platforms string -->
-                </div>
-                
-                <!-- Floating action bar for saving manual order -->
-                <div id="floatingSaveBar" style="display: none; position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); background: #182018; color: #fffdfa; padding: 10px 20px; border-radius: 9999px; box-shadow: 0 10px 30px rgba(0,0,0,0.4); align-items: center; gap: 16px; z-index: 99999;">
-                    <span style="font-size: 12px; opacity: 0.9; font-weight: 500;">未保存的排序更改</span>
-                    <button class="btn" onclick="discardManualChanges()" style="background: transparent; border: 1px solid rgba(255,255,255,0.2); color: #fffdfa; padding: 4px 12px; font-size: 11px; border-radius: 6px; cursor: pointer; transition: all 0.2s;">放弃</button>
-                    <button class="btn" onclick="saveManualChanges()" style="background: #ffffff; border: none; color: #182018; padding: 4px 12px; font-size: 11px; font-weight: 600; border-radius: 6px; cursor: pointer; transition: all 0.2s;">保存更改</button>
-                </div>
-            </section>
-            </div>
-
-            <!-- TAB: PLAYGROUND -->
-            <div id="pane-playground" class="tab-pane">
-                <section class="workbench" aria-label="模型与测试工作区">
+                <div class="workbench-side">
                     <section class="card">
                         <div class="card-head">
                             <div>
-                                <h2>2. 模型浏览与推荐</h2>
-                                <div class="subtle">推荐模型优先展示。选中后右侧会直接带入当前验证模型。</div>
-                            </div>
-                            <div class="toolbar">
-                                <input class="field" id="modelSearch" placeholder="搜索 provider / model id">
-                                <button class="btn btn-secondary" id="refreshModelsBtn">刷新当前列表</button>
+                                <h2>3. 模型验证</h2>
+                                <div class="subtle">先探测可用性，再发送真实聊天请求。所有结果都会落在同一个工作区。</div>
                             </div>
                         </div>
-                        <div class="tabs" id="providerTabs"></div>
-                        <div class="panel-note" id="modelSummary">先配置至少一个 provider，再加载模型列表。</div>
-                        <div class="model-list" id="modelList" style="margin-top: 12px;"></div>
+                        <div class="split" style="margin-bottom: 12px;">
+                            <select class="select" id="chatProvider"></select>
+                            <input class="field mono" id="chatModel" list="modelSuggestions" placeholder="输入或选择模型 ID">
+                        </div>
+                        <datalist id="modelSuggestions"></datalist>
+                        <textarea class="textarea" id="chatPrompt" placeholder="输入测试 Prompt">Reply with exactly OK</textarea>
+                        <div class="toolbar" style="margin-top: 12px;">
+                            <button class="btn btn-secondary" id="probeSelectedBtn">探测模型</button>
+                            <button class="btn btn-primary" id="sendChatBtn">发送测试请求</button>
+                            <button class="btn btn-ghost" id="fillProbePromptBtn">填入最小测试 Prompt</button>
+                        </div>
+                        <div id="diagnosticsBox" class="result-box status-info" style="margin-top: 12px;">还没有执行验证。</div>
                     </section>
+                </div>
+            </section>
 
-                    <div class="workbench-side">
-                        <section class="card">
-                            <div class="card-head">
-                                <div>
-                                    <h2>3. 模型验证</h2>
-                                    <div class="subtle">先探测可用性，再发送真实聊天请求。所有结果都会落在同一个工作区。</div>
-                                </div>
-                            </div>
-                            <div class="split" style="margin-bottom: 12px;">
-                                <select class="select" id="chatProvider"></select>
-                                <input class="field mono" id="chatModel" list="modelSuggestions" placeholder="输入或选择模型 ID">
-                            </div>
-                            <datalist id="modelSuggestions"></datalist>
-                            <textarea class="textarea" id="chatPrompt" placeholder="输入测试 Prompt">Reply with exactly OK</textarea>
-                            <div class="toolbar" style="margin-top: 12px;">
-                                <button class="btn btn-secondary" id="probeSelectedBtn">探测模型</button>
-                                <button class="btn btn-primary" id="sendChatBtn">发送测试请求</button>
-                                <button class="btn btn-ghost" id="fillProbePromptBtn">填入最小测试 Prompt</button>
-                            </div>
-                            <div id="diagnosticsBox" class="result-box status-info" style="margin-top: 12px;">还没有执行验证。</div>
-                        </section>
-                    </div>
-                </section>
-            </div>
-
-            <!-- TAB: ANALYSIS -->
-            <div id="pane-analysis" class="tab-pane">
             <section class="card" id="statsSection">
                 <div class="card-head">
                     <div>
@@ -1093,15 +695,81 @@
                         </thead>
                         <tbody id="usageStatsBody">
                             <tr><td colspan="3" style="padding: 12px; text-align: center; color: var(--muted);">正在加载统计数据...</td></tr>
+                        <tbody id="modelsStatsBody">
+                        <tbody id="modelsStatsBody">
+                        </tbody>
+                    </table>
+                </div>
+                </div>
+            </section>
+
+            <section class="card" id="routingStatusSection">
+                <div class="card-head">
+                    <div>
+                        <h2>5. 路由探针与排行 (Routing Status)</h2>
+                        <div class="subtle">默认按照「能力 > 健康」排序。你可以点击表格右侧的按钮手动干预顺序，置顶、上移或下移。手动干预后将永久覆盖默认顺序，直到点击重置。</div>
+                    </div>
+                    <div style="display: flex; gap: 8px;">
+                        <button class="btn btn-ghost" id="resetOrderBtn">重置默认排序</button>
+                        <button class="btn btn-secondary" onclick="fetchModelsStats()">刷新排行</button>
+                    </div>
+                </div>
+                <div class="table-container" style="overflow-x: auto; margin-top: 12px;">
+                    <table style="width: 100%; border-collapse: collapse; text-align: left; background: #fff; border: 1px solid var(--line); border-radius: 8px;">
+                        <thead>
+                            <tr style="border-bottom: 1px solid var(--line); background: #f9f9f9;">
+                                <th style="padding: 12px; font-weight: 600; width: 60px;">顺位</th>
+                                <th style="padding: 12px; font-weight: 600;">Provider</th>
+                                <th style="padding: 12px; font-weight: 600;">模型 (Model)</th>
+                                <th style="padding: 12px; font-weight: 600;">状态</th>
+                                <th style="padding: 12px; font-weight: 600;">额度剩余 (Rate Limit)</th>
+                                <th style="padding: 12px; font-weight: 600; width: 140px; text-align: center;">操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="modelsStatsBody">
+                            <tr><td colspan="5" style="padding: 12px; text-align: center; color: var(--muted);">正在加载实时排行...</td></tr>
                         </tbody>
                     </table>
                 </div>
             </section>
-            </div>
 
-            
+            <section class="card">
+                <div class="card-head">
+                    <div>
+                        <h2>6. 接入说明</h2>
+                        <div class="subtle">以下示例与当前真实实现一致，只保留稳定别名 `free-proxy/auto`。</div>
+                    </div>
+                </div>
+                <div class="guide-block">
+                    <div class="guide-title">OpenAI / Python SDK</div>
+                    <pre class="guide-code">from openai import OpenAI
 
-            
+client = OpenAI(
+    api_key="not-needed",
+    base_url="http://127.0.0.1:8765/v1",
+)
+
+resp = client.chat.completions.create(
+    model="free-proxy/auto",
+    messages=[{"role": "user", "content": "Reply with exactly OK"}],
+)
+print(resp.choices[0].message.content)</pre>
+                </div>
+                <div class="guide-block">
+                    <div class="guide-title">OpenClaw 关键配置</div>
+                    <pre class="guide-code">provider id: free-proxy
+baseUrl: http://localhost:8765/v1
+models: auto
+默认模型: free-proxy/auto</pre>
+                </div>
+                <div class="guide-block">
+                    <div class="guide-title">Opencode 验证方式</div>
+                    <pre class="guide-code">配置路径: ~/.config/opencode/opencode.json
+provider id: free-proxy
+推荐命令:
+opencode run -m free-proxy/auto "Reply with exactly OK"</pre>
+                </div>
+            </section>
         </div>
     </div>
 
@@ -1109,24 +777,12 @@
 
     <script>
         const PROVIDERS = [
-            { id: 'github', name: 'GitHub Models', tier: '免费', tierClass: 'free', placeholder: 'github token', keyUrl: 'https://github.com/settings/tokens' },
-            { id: 'google', name: 'Google AI Studio', tier: '免费', tierClass: 'free', placeholder: 'google key', keyUrl: 'https://aistudio.google.com/' },
-            { id: 'gemini', name: 'Gemini', tier: '免费', tierClass: 'free', placeholder: 'gemini key', keyUrl: 'https://aistudio.google.com/app/apikey' },
+            { id: 'openrouter', name: 'OpenRouter', tier: '免费', tierClass: 'free', placeholder: 'openrouter key', keyUrl: 'https://openrouter.ai/keys' },
             { id: 'groq', name: 'Groq', tier: '免费', tierClass: 'free', placeholder: 'groq key', keyUrl: 'https://console.groq.com/keys' },
-            { id: 'cerebras', name: 'Cerebras', tier: '免费', tierClass: 'free', placeholder: 'cerebras key', keyUrl: 'https://console.cerebras.ai/' },
-            { id: 'sambanova', name: 'SambaNova', tier: '免费', tierClass: 'free', placeholder: 'sambanova key', keyUrl: 'https://cloud.sambanova.ai/' },
-            { id: 'nvidia', name: 'NVIDIA NIM', tier: '免费', tierClass: 'free', placeholder: 'nvidia key', keyUrl: 'https://build.nvidia.com/' },
-            { id: 'mistral', name: 'Mistral', tier: '免费', tierClass: 'free', placeholder: 'mistral key', keyUrl: 'https://console.mistral.ai/api-keys' },
-            { id: 'openrouter', name: 'OpenRouter', tier: '免费/付费', tierClass: 'free', placeholder: 'openrouter key', keyUrl: 'https://openrouter.ai/keys' },
-            { id: 'cohere', name: 'Cohere', tier: '免费', tierClass: 'free', placeholder: 'cohere key', keyUrl: 'https://dashboard.cohere.com/api-keys' },
-            { id: 'cloudflare', name: 'Cloudflare Workers AI', tier: '免费', tierClass: 'free', placeholder: 'account_id:token', keyUrl: 'https://dash.cloudflare.com/' },
-            { id: 'zhipu', name: '智谱 AI (GLM)', tier: '免费', tierClass: 'free', placeholder: 'zhipu key', keyUrl: 'https://open.bigmodel.cn/usercenter/apikeys' },
-            { id: 'ollama', name: 'Ollama Cloud', tier: '免费', tierClass: 'free', placeholder: 'ollama key (if needed)', keyUrl: 'https://ollama.com' },
-            { id: 'kilo', name: 'Kilo Gateway', tier: '免费', tierClass: 'free', placeholder: 'kilo key (if needed)', keyUrl: 'https://api.kilo.ai' },
-            { id: 'pollinations', name: 'Pollinations', tier: '免费', tierClass: 'free', placeholder: 'pollinations key (optional)', keyUrl: 'https://pollinations.ai' },
-            { id: 'llm7', name: 'LLM7.io', tier: '免费', tierClass: 'free', placeholder: 'llm7 key (optional)', keyUrl: 'https://api.llm7.io' },
-            { id: 'huggingface', name: 'HuggingFace Router', tier: '免费', tierClass: 'free', placeholder: 'hf token', keyUrl: 'https://huggingface.co/settings/tokens' },
-            { id: 'opencode', name: 'OpenCode Zen', tier: '免费', tierClass: 'free', placeholder: 'opencode key', keyUrl: 'https://opencode.ai/auth' }
+            { id: 'gemini', name: 'Gemini', tier: '免费', tierClass: 'free', placeholder: 'gemini key', keyUrl: 'https://aistudio.google.com/app/apikey' },
+            { id: 'github', name: 'GitHub Models', tier: '免费', tierClass: 'free', placeholder: 'github token', keyUrl: 'https://github.com/settings/tokens' },
+            { id: 'mistral', name: 'Mistral', tier: '免费', tierClass: 'free', placeholder: 'mist-...', keyUrl: 'https://console.mistral.ai/api-keys' },
+            { id: 'sambanova', name: 'SambaNova', tier: '免费', tierClass: 'free', placeholder: 'sn-...', keyUrl: 'https://cloud.sambanova.ai/' },
         ];
 
         const state = {
@@ -1139,7 +795,6 @@
             editing: {},
         };
 
-        let currentModelsOrder = [];
         const toast = document.getElementById('toast');
         const providerTabs = document.getElementById('providerTabs');
         const modelList = document.getElementById('modelList');
@@ -1353,17 +1008,7 @@
         }
 
         function renderProviderCards() {
-            const visible = PROVIDERS.filter(p => {
-                const status = state.statuses[p.id] || { configured: false };
-                return status.configured || state.editing[p.id];
-            });
-
-            if (visible.length === 0) {
-                providerGrid.innerHTML = '<div style="grid-column: 1/-1; text-align: center; padding: 30px; color: var(--muted); background: #fafafa; border-radius: 12px; border: 1px dashed var(--line);">当前未配置任何 Provider。请在右上方下拉框选择一个并点击“添加 Provider”。</div>';
-                return;
-            }
-
-            providerGrid.innerHTML = visible.map((provider) => {
+            providerGrid.innerHTML = PROVIDERS.map((provider) => {
                 const status = state.statuses[provider.id] || { configured: false, masked: '' };
                 const verify = state.verifyResults[provider.id];
                 const isEditing = Boolean(state.editing[provider.id]) || !status.configured;
@@ -1391,7 +1036,7 @@
                             <div class="provider-actions">
                                 <input class="field" id="key-${provider.id}" type="password" autocomplete="off" placeholder="${provider.placeholder}">
                                 <button class="btn btn-primary" data-action="save" data-provider="${provider.id}">保存</button>
-                                ${status.configured ? `<button class="btn btn-ghost" data-action="cancel-edit" data-provider="${provider.id}">取消</button>` : `<button class="btn btn-ghost" data-action="cancel-edit" data-provider="${provider.id}">取消</button>`}
+                                ${status.configured ? `<button class="btn btn-ghost" data-action="cancel-edit" data-provider="${provider.id}">取消</button>` : `<button class="btn btn-ghost" data-action="verify" data-provider="${provider.id}" ${status.configured ? '' : 'disabled'}>验证</button>`}
                             </div>
                         ` : `
                             <div class="masked mono">${escapeHtml(status.masked || '已配置')}</div>
@@ -1405,34 +1050,6 @@
                     </div>
                 `;
             }).join('');
-        }
-
-        window.addNewProvider = function() {
-            const providerId = document.getElementById('addProviderSelect').value;
-            if (!providerId) return;
-            state.editing[providerId] = true;
-            renderProviderCards();
-            populateAddProviderSelect();
-            setTimeout(() => {
-                const input = document.getElementById(`key-${providerId}`);
-                if (input) input.focus();
-            }, 100);
-        };
-
-        function populateAddProviderSelect() {
-            const select = document.getElementById('addProviderSelect');
-            if (!select) return;
-            const available = PROVIDERS.filter(p => {
-                const status = state.statuses[p.id] || { configured: false };
-                return !status.configured && !state.editing[p.id];
-            });
-            if (available.length === 0) {
-                select.innerHTML = '<option value="">无可用 Provider</option>';
-                select.disabled = true;
-            } else {
-                select.innerHTML = available.map(p => `<option value="${p.id}">${p.name}</option>`).join('');
-                select.disabled = false;
-            }
         }
 
         function renderProviderTabs() {
@@ -1674,12 +1291,9 @@
 
         async function loadStatuses() {
             state.statuses = await requestJson('/api/provider-keys');
-            allProviderStatuses = state.statuses;
             renderProviderCards();
-            populateAddProviderSelect();
             renderProviderTabs();
             refreshChatOptions();
-            renderUnconfiguredFooter();
         }
 
         function buildDiagnosticLines(actionLabel, providerId, modelId, payload, fallbackMessage) {
@@ -1903,13 +1517,11 @@
             if (action === 'edit') {
                 state.editing[providerId] = true;
                 renderProviderCards();
-                populateAddProviderSelect();
                 return;
             }
             if (action === 'cancel-edit') {
                 state.editing[providerId] = false;
                 renderProviderCards();
-                populateAddProviderSelect();
                 return;
             }
         });
@@ -1993,124 +1605,51 @@
             ]);
         }
 
-
-        let localModelsOrder = null;
-        let currentStrategy = 'balanced';
-        let allProviderStatuses = {};
-
-        const platformColors = {
-            google:      '#4285f4',
-            groq:        '#f55036',
-            cerebras:    '#8b5cf6',
-            sambanova:   '#14b8a6',
-            nvidia:      '#76b900',
-            mistral:     '#f59e0b',
-            openrouter:  '#ec4899',
-            github:      '#6e7b8b',
-            cohere:      '#d946ef',
-            cloudflare:  '#f38020',
-            zhipu:       '#06b6d4',
-            ollama:      '#000000',
-            kilo:        '#7c3aed',
-            pollinations: '#a855f7',
-            llm7:        '#0ea5e9',
-            huggingface: '#ff9d00',
-            opencode:    '#2563eb'
-        };
-
-        const STRATEGIES = {
-            'priority': {
-                label: '手动',
-                blurb: '手动模式：请求按以下顺序排列，从上到下。拖动即可重新排序。',
-                weights: null
-            },
-            'balanced': {
-                label: '均衡',
-                blurb: '均衡模式：可靠性主导 (50%)，速度与智力平分秋色 (各占 25%)。通用默认推荐。',
-                weights: { reliability: 0.5, speed: 0.25, intelligence: 0.25 }
-            },
-            'smartest': {
-                label: '最聪明的',
-                blurb: '最聪明模式：优先选用最聪明的可用模型。智力占 55%，可靠性占 35%，速度占 10%。',
-                weights: { reliability: 0.35, speed: 0.1, intelligence: 0.55 }
-            },
-            'fastest': {
-                label: '最快',
-                blurb: '最快模式：优先选用响应最快的可用模型。速度占 55%，可靠性占 35%，智力占 10%。',
-                weights: { reliability: 0.35, speed: 0.55, intelligence: 0.1 }
-            },
-            'reliable': {
-                label: '最可靠',
-                blurb: '最可靠模式：最大限度保障成功率。可靠性占 70%，速度与智力各占 15%。',
-                weights: { reliability: 0.7, speed: 0.15, intelligence: 0.15 }
-            }
-        };
-
-        window.setStrategy = function(strat) {
-            currentStrategy = strat;
-            localModelsOrder = null;
-            document.getElementById('floatingSaveBar').style.display = 'none';
-
-            document.querySelectorAll('.strategy-btn').forEach(btn => {
-                if (btn.id.startsWith('strat-')) {
-                    btn.classList.remove('active');
-                }
-            });
-            const activeBtn = document.getElementById(`strat-${strat}`);
-            if (activeBtn) {
-                activeBtn.classList.add('active');
-            }
-
-            const info = STRATEGIES[strat];
-            const weightsSpan = document.getElementById('strategyWeights');
-            const blurbP = document.getElementById('strategyBlurb');
-            if (blurbP) {
-                blurbP.textContent = info.blurb;
-            }
-            if (weightsSpan) {
-                if (info.weights) {
-                    weightsSpan.textContent = `可靠性 ${Math.round(info.weights.reliability * 100)}% · 速度 ${Math.round(info.weights.speed * 100)}% · 智力 ${Math.round(info.weights.intelligence * 100)}%`;
-                } else {
-                    weightsSpan.textContent = '';
-                }
-            }
-
-            renderModelsStatsTable();
-        };
-
-        window.toggleModelEnabled = async function(modelId, checked) {
+        document.getElementById('resetOrderBtn').addEventListener('click', async (event) => {
+            const btn = event.currentTarget;
+            btn.disabled = true;
+            btn.textContent = '重置中...';
             try {
-                const res = await fetch(`/api/models/toggle`, {
+                const res = await fetch('/api/manual-order', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ model_id: modelId, enabled: checked })
+                    body: JSON.stringify({ order: [] })
                 });
                 if (res.ok) {
-                    showToast(checked ? '模型已启用' : '模型已禁用');
+                    showToast('重置成功');
                     await fetchModelsStats();
-                    if (typeof loadStatuses === 'function') {
-                        await loadStatuses();
-                    }
                 } else {
-                    showToast('切换状态失败', 'error');
+                    showToast('重置失败', 'error');
                 }
             } catch (err) {
                 console.error(err);
-                showToast('网络错误，切换失败', 'error');
+                showToast('重置失败', 'error');
+            } finally {
+                btn.disabled = false;
+                btn.textContent = '重置默认排序';
             }
-        };
+        });
 
-        window.discardManualChanges = function() {
-            localModelsOrder = null;
-            document.getElementById('floatingSaveBar').style.display = 'none';
-            renderModelsStatsTable();
-            showToast('已放弃更改');
-        };
-
-        window.saveManualChanges = async function() {
-            if (!localModelsOrder) return;
+        window.moveModel = async function(index, direction) {
+            if (index < 0 || index >= currentModelsOrder.length) return;
+            let newOrder = [...currentModelsOrder];
+            const item = newOrder[index];
+            
+            if (direction === 'top') {
+                newOrder.splice(index, 1);
+                newOrder.unshift(item);
+            } else if (direction === 'up' && index > 0) {
+                newOrder.splice(index, 1);
+                newOrder.splice(index - 1, 0, item);
+            } else if (direction === 'down' && index < newOrder.length - 1) {
+                newOrder.splice(index, 1);
+                newOrder.splice(index + 1, 0, item);
+            } else {
+                return; // Cannot move
+            }
+            
             try {
-                const orderStrings = localModelsOrder.map(i => `${i.provider}/${i.model}`);
+                const orderStrings = newOrder.map(i => `${i.provider}/${i.model}`);
                 const res = await fetch('/api/manual-order', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -2118,55 +1657,14 @@
                 });
                 if (res.ok) {
                     showToast('排序已保存');
-                    localModelsOrder = null;
-                    document.getElementById('floatingSaveBar').style.display = 'none';
                     await fetchModelsStats();
                 } else {
                     showToast('保存排序失败', 'error');
                 }
             } catch (err) {
                 console.error(err);
-                showToast('网络错误，保存排序失败', 'error');
+                showToast('网络错误，保存失败', 'error');
             }
-        };
-
-        let dragSrcIndex = null;
-        window.rowDragStart = function(event, index) {
-            if (currentStrategy !== 'priority') {
-                event.preventDefault();
-                return;
-            }
-            dragSrcIndex = index;
-            event.dataTransfer.effectAllowed = 'move';
-            event.dataTransfer.setData('text/plain', index);
-            event.currentTarget.style.opacity = '0.4';
-        };
-
-        window.rowDragOver = function(event) {
-            if (currentStrategy !== 'priority') return;
-            event.preventDefault();
-            event.dataTransfer.dropEffect = 'move';
-        };
-
-        window.rowDrop = function(event, targetIndex) {
-            if (currentStrategy !== 'priority') return;
-            event.preventDefault();
-            event.currentTarget.style.opacity = '1.0';
-            if (dragSrcIndex === null || dragSrcIndex === targetIndex) return;
-            
-            let displayList = localModelsOrder ? [...localModelsOrder] : [...currentModelsOrder];
-            const dragItem = displayList[dragSrcIndex];
-            displayList.splice(dragSrcIndex, 1);
-            displayList.splice(targetIndex, 0, dragItem);
-            
-            localModelsOrder = displayList;
-            document.getElementById('floatingSaveBar').style.display = 'flex';
-            renderModelsStatsTable();
-        };
-        
-        window.rowDragEnd = function(event) {
-            event.currentTarget.style.opacity = '1.0';
-            dragSrcIndex = null;
         };
 
         async function fetchUsageStats() {
@@ -2198,238 +1696,60 @@
             try {
                 const res = await fetch('/api/models-stats');
                 const data = await res.json();
-                if (!data || !data.models) return;
+                const tbody = document.getElementById('modelsStatsBody');
+                if (!tbody) return;
+                
+                if (!data || !data.models || data.models.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="6" style="padding: 12px; text-align: center; color: var(--muted);">暂无模型排行数据</td></tr>';
+                    return;
+                }
+                
                 currentModelsOrder = data.models;
-                renderModelsStatsTable();
+                
+                tbody.innerHTML = data.models.map((item, index) => {
+                    const isHealthy = item.ok === true;
+                    const isUnhealthy = item.ok === false;
+                    const statusHtml = isHealthy 
+                        ? '<span style="color: #176347; background: #e7f3eb; padding: 2px 6px; border-radius: 4px; font-size: 12px;">🟢 健康</span>' 
+                        : (isUnhealthy ? '<span style="color: #c92a2a; background: #fff5f5; padding: 2px 6px; border-radius: 4px; font-size: 12px;">🔴 熔断中</span>' 
+                        : '<span style="color: #495057; background: #f1f3f5; padding: 2px 6px; border-radius: 4px; font-size: 12px;">⚪ 未知</span>');
+                    
+                    const limits = item.rate_limits || {};
+                    let limitHtml = '<span style="color: var(--muted); font-size: 12px;">无</span>';
+                    
+                    const reqRemaining = limits['x-ratelimit-remaining-requests'];
+                    const reqLimit = limits['x-ratelimit-limit-requests'];
+                    const tokRemaining = limits['x-ratelimit-remaining-tokens'] || limits['x-ratelimit-remaining-tokens-today'];
+                    
+                    let parts = [];
+                    if (reqRemaining) parts.push(`Req: ${reqRemaining}${reqLimit ? '/' + reqLimit : ''}`);
+                    if (tokRemaining) parts.push(`Tok: ${tokRemaining}`);
+                    
+                    if (parts.length > 0) {
+                        limitHtml = `<span style="font-size: 12px;">${parts.join(' | ')}</span>`;
+                    }
+                    
+                    const btnStyle = 'padding: 4px 8px; font-size: 12px; margin: 0 2px;';
+                    const actionHtml = `
+                        <button class="btn btn-secondary" style="${btnStyle}" onclick="moveModel(${index}, 'top')" ${index === 0 ? 'disabled' : ''} title="置顶">置顶</button>
+                        <button class="btn btn-secondary" style="${btnStyle}" onclick="moveModel(${index}, 'up')" ${index === 0 ? 'disabled' : ''} title="上移">上移</button>
+                        <button class="btn btn-secondary" style="${btnStyle}" onclick="moveModel(${index}, 'down')" ${index === data.models.length - 1 ? 'disabled' : ''} title="下移">下移</button>
+                    `;
+                    
+                    return `
+                        <tr style="border-bottom: 1px solid var(--line);">
+                            <td style="padding: 12px; font-weight: 500;">#${index + 1}</td>
+                            <td style="padding: 12px;">${escapeHtml(item.provider)}</td>
+                            <td style="padding: 12px; font-family: monospace;">${escapeHtml(item.model)}</td>
+                            <td style="padding: 12px;">${statusHtml}</td>
+                            <td style="padding: 12px;">${limitHtml}</td>
+                            <td style="padding: 12px; text-align: center;">${actionHtml}</td>
+                        </tr>
+                    `;
+                }).join('');
             } catch (err) {
                 console.error('fetchModelsStats error:', err);
             }
-        }
-
-        function calculateScore(item, strategyKey) {
-            if (strategyKey === 'priority') return 0;
-            const weights = STRATEGIES[strategyKey].weights;
-            if (!weights) return 0;
-            const rel = (item.rel || 0) / 100;
-            const spd = (item.spd || 0) / 100;
-            const intel = (item.int || 0) / 100;
-            const headroom = item.headroom !== undefined ? item.headroom : 1.0;
-            
-            const base = (weights.reliability * rel + weights.speed * spd + weights.intelligence * intel);
-            return base * headroom;
-        }
-
-        function getTokensValue(budgetStr) {
-            if (!budgetStr) return 0;
-            const val = parseFloat(budgetStr.replace(/[^\d.]/g, ''));
-            if (isNaN(val)) return 0;
-            if (budgetStr.toUpperCase().includes('M')) return val * 1000000;
-            if (budgetStr.toUpperCase().includes('K')) return val * 1000;
-            return val;
-        }
-
-        function formatTokensChinese(n) {
-            if (n >= 100000000) return `${(n / 100000000).toFixed(1).replace('.0','')}亿`;
-            if (n >= 10000) {
-                return `${(n / 10000).toFixed(1).replace('.0','')}万`;
-            }
-            return String(n);
-        }
-
-        function renderBudgetCard() {
-            const card = document.getElementById('budgetCard');
-            const text = document.getElementById('budgetText');
-            const progress = document.getElementById('budgetProgressBar');
-            const legend = document.getElementById('budgetLegend');
-            if (!card || !progress || !legend) return;
-
-            const enabledModels = currentModelsOrder.filter(item => item.enabled);
-            if (enabledModels.length === 0) {
-                card.style.display = 'none';
-                return;
-            }
-            card.style.display = 'block';
-
-            let totalBudgetVal = 0;
-            const modelBudgets = enabledModels.map(item => {
-                const val = getTokensValue(item.monthly_token_budget);
-                totalBudgetVal += val;
-                return {
-                    name: item.model,
-                    provider: item.provider,
-                    budget: val
-                };
-            });
-
-            if (totalBudgetVal === 0) {
-                card.style.display = 'none';
-                return;
-            }
-
-            const formattedTotal = formatTokensChinese(totalBudgetVal);
-            text.innerHTML = `剩余 <span style="color: var(--text); font-weight: 600;">${formattedTotal}</span>，${formattedTotal} 的 100%`;
-
-            progress.innerHTML = modelBudgets.map(m => {
-                const pct = (m.budget / totalBudgetVal) * 100;
-                const color = platformColors[m.provider] || '#94a3b8';
-                return `<div class="budget-progress-segment" title="${m.name} (${m.provider}) - ${formatTokensChinese(m.budget)}" style="width: ${pct}%; background-color: ${color};"></div>`;
-            }).join('');
-
-            legend.innerHTML = modelBudgets.map(m => {
-                const color = platformColors[m.provider] || '#94a3b8';
-                return `
-                    <div class="legend-item">
-                        <span class="legend-dot" style="background-color: ${color};"></span>
-                        <span style="font-weight: 500; color: var(--text);">${escapeHtml(m.name)}</span>
-                        <span style="color: var(--muted); font-size: 11px; margin-left: 2px;">(${escapeHtml(m.provider)})</span>
-                        <span style="flex: 1;"></span>
-                        <span style="font-family: monospace; color: var(--muted);">${formatTokensChinese(m.budget)}</span>
-                    </div>
-                `;
-            }).join('');
-        }
-
-        function renderUnconfiguredFooter() {
-            const footer = document.getElementById('unconfiguredFooter');
-            if (!footer) return;
-            const unconfigured = [];
-            for (const [name, info] of Object.entries(allProviderStatuses)) {
-                if (!info.configured) {
-                    unconfigured.push(name);
-                }
-            }
-            if (unconfigured.length > 0) {
-                footer.innerHTML = `<span style="opacity: 0.8;">隐藏 (无密钥)：</span> ${unconfigured.join(', ')}`;
-            } else {
-                footer.innerHTML = '';
-            }
-        }
-
-        // loadStatuses is now defined in-place with unconfigured footer logic.
-
-        function renderModelsStatsTable() {
-            const tbody = document.getElementById('modelsStatsBody');
-            if (!tbody) return;
-            
-            renderBudgetCard();
-            
-            const activeList = localModelsOrder || currentModelsOrder;
-            if (activeList.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="9" style="padding: 12px; text-align: center; color: var(--muted);">暂无模型排行数据</td></tr>';
-                return;
-            }
-            
-            let displayList = [...activeList];
-            if (currentStrategy !== 'priority') {
-                displayList.sort((a, b) => {
-                    const scoreA = calculateScore(a, currentStrategy);
-                    const scoreB = calculateScore(b, currentStrategy);
-                    return scoreB - scoreA;
-                });
-            }
-            
-            tbody.innerHTML = displayList.map((item, index) => {
-                const score = currentStrategy === 'priority' ? (item.score || 0) : calculateScore(item, currentStrategy);
-                
-                const modelLower = item.model.toLowerCase();
-                const supportsVision = modelLower.includes('vision') || modelLower.includes('gpt-4o') || modelLower.includes('gemini') || modelLower.includes('claude-3');
-                const supportsTools = modelLower.includes('gpt-4') || modelLower.includes('gemini') || modelLower.includes('llama-3') || modelLower.includes('claude-3');
-                
-                const isManual = currentStrategy === 'priority';
-                const dragIcon = isManual 
-                    ? `<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" style="vertical-align: middle;"><circle cx="9" cy="6" r="1.5" /><circle cx="15" cy="6" r="1.5" /><circle cx="9" cy="12" r="1.5" /><circle cx="15" cy="12" r="1.5" /><circle cx="9" cy="18" r="1.5" /><circle cx="15" cy="18" r="1.5" /></svg>`
-                    : `·`;
-                
-                const dragCursor = isManual ? 'grab' : 'default';
-                const rowOpacity = item.enabled ? '1.0' : '0.5';
-                
-                const budgetStr = item.monthly_token_budget || '18M';
-                const formattedBudget = budgetStr.includes('M') 
-                    ? `约${parseFloat(budgetStr.replace('~','').replace('M','')) * 100}万` 
-                    : budgetStr;
-                
-                return `
-                    <tr style="border-bottom: 1px solid var(--line); opacity: ${rowOpacity}; transition: opacity 0.2s;" 
-                        draggable="${isManual}"
-                        ondragstart="rowDragStart(event, ${index})"
-                        ondragover="rowDragOver(event)"
-                        ondrop="rowDrop(event, ${index})"
-                        ondragend="rowDragEnd(event)">
-                        
-                        <!-- Drag Handle -->
-                        <td style="padding: 12px; text-align: center; color: var(--muted); cursor: ${dragCursor}; font-weight: bold; font-size: 14px;">
-                            ${dragIcon}
-                        </td>
-                        
-                        <!-- Index -->
-                        <td style="padding: 12px; font-weight: 500; text-align: center;">
-                            #${index + 1}
-                        </td>
-                        
-                        <!-- Model -->
-                        <td style="padding: 12px; vertical-align: middle;">
-                            <div style="display: flex; align-items: center; gap: 4px; flex-wrap: wrap;">
-                                <span style="font-weight: 600; font-size: 14px; color: var(--text);">${escapeHtml(item.model)}</span>
-                                <span style="font-size: 11px; color: var(--muted); background: #f0f2f0; padding: 1px 5px; border-radius: 4px;">${escapeHtml(item.provider)}</span>
-                                ${supportsVision ? '<span class="badge-tag tag-vision">想象</span>' : ''}
-                                ${supportsTools ? '<span class="badge-tag tag-tools">工具</span>' : ''}
-                                ${item.observations > 0 ? `<span class="badge-tag tag-obs">${item.observations}次观察</span>` : ''}
-                            </div>
-                            <div style="font-size: 11px; color: var(--muted); opacity: 0.8; margin-top: 4px;">
-                                ${formattedBudget}/月 · ${item.rpm_limit || '10'}转/分 · ${item.rpd_limit || '50'}转/日
-                            </div>
-                        </td>
-                        
-                        <!-- Reliability -->
-                        <td style="padding: 12px; vertical-align: middle;">
-                            <div class="axis-bar-container">
-                                <div class="axis-bar">
-                                    <div class="axis-bar-inner" style="width: ${item.rel}%; background-color: #22c55e;"></div>
-                                </div>
-                                <span class="axis-val">${item.rel}</span>
-                            </div>
-                        </td>
-                        
-                        <!-- Speed -->
-                        <td style="padding: 12px; vertical-align: middle;">
-                            <div class="axis-bar-container">
-                                <div class="axis-bar">
-                                    <div class="axis-bar-inner" style="width: ${item.spd}%; background-color: #3b82f6;"></div>
-                                </div>
-                                <span class="axis-val">${item.spd}</span>
-                            </div>
-                        </td>
-                        
-                        <!-- Intelligence -->
-                        <td style="padding: 12px; vertical-align: middle;">
-                            <div class="axis-bar-container">
-                                <div class="axis-bar">
-                                    <div class="axis-bar-inner" style="width: ${item.int}%; background-color: #a855f7;"></div>
-                                </div>
-                                <span class="axis-val">${item.int}</span>
-                            </div>
-                        </td>
-                        
-                        <!-- Guardrails -->
-                        <td style="padding: 12px; vertical-align: middle; text-align: center; font-family: monospace; font-size: 11px; color: var(--muted);">
-                            ${item.headroom < 0.99 ? `×${item.headroom.toFixed(2)}` : '—'}
-                        </td>
-                        
-                        <!-- Score -->
-                        <td style="padding: 12px; vertical-align: middle; text-align: right; font-family: monospace; font-weight: 600;">
-                            ${score.toFixed(3)}
-                        </td>
-                        
-                        <!-- Switch (iOS toggle) -->
-                        <td style="padding: 12px; vertical-align: middle; text-align: right;">
-                            <label class="switch">
-                                <input type="checkbox" ${item.enabled ? 'checked' : ''} onchange="toggleModelEnabled('${item.provider}/${item.model}', this.checked)">
-                                <span class="slider"></span>
-                            </label>
-                        </td>
-                    </tr>
-                `;
-            }).join('');
         }
 
         startApp().catch((error) => {
@@ -2438,34 +1758,6 @@
                 error.message || '未知错误',
             ]);
             showToast('初始化失败', 'error');
-        });
-    
-        // --- TAB SWITCHING LOGIC ---
-        document.querySelectorAll('.nav-link').forEach(link => {
-            link.addEventListener('click', (e) => {
-                e.preventDefault();
-                
-                // Update nav links
-                document.querySelectorAll('.nav-link').forEach(l => l.classList.remove('active'));
-                e.currentTarget.classList.add('active');
-                
-                // Switch tab pane
-                const targetId = e.currentTarget.getAttribute('href').replace('#', 'pane-');
-                document.querySelectorAll('.tab-pane').forEach(pane => {
-                    pane.classList.remove('active');
-                });
-                
-                const targetPane = document.getElementById(targetId);
-                if (targetPane) {
-                    targetPane.classList.add('active');
-                }
-                
-                // Hide Hero if not on Models tab
-                const hero = document.querySelector('.hero');
-                if (hero) {
-                    hero.style.display = targetId === 'pane-models' ? 'block' : 'none';
-                }
-            });
         });
     </script>
 </body>

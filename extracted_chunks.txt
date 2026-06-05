@@ -1,0 +1,281 @@
+FAILED TO PARSE CHUNKS_STR: Invalid \escape: line 1 column 256 (char 255)
+=== REPLACE ===
+TARGET:
+'"        async function probeSelectedModel(button) {\\n            const providerId = chatProvider.va'
+REPLACEMENT:
+"        async function probeSelectedModel(button) {\n            const providerId = chatProvider.value.trim();\n            const modelId = chatModel.value.trim();\n            if (!providerId || !modelId) {\n                showToast('请先选择 provid
+<truncated 5035 bytes>
+================
+
+FAILED TO PARSE CHUNKS_STR: Invalid control character at: line 1 column 257 (char 256)
+=== REPLACE ===
+TARGET:
+'"                                    ${obs > 0 ? \\\\`<span class=\\"pill-tag pill-text\\">\\\\${obs}次观察</'
+REPLACEMENT:
+"                                    ${obs > 0 ? '<span class=\"pill-tag pill-text\">' + obs + '次观察</span>' : ''}"
+================
+
+=== REPLACE ===
+TARGET:
+'"        async function fetchModelsStats() {\\n            try {\\n                const res = await f'
+REPLACEMENT:
+"        // Removed duplicate fetchModelsStats to prevent overriding the main implementation"
+================
+
+=== REPLACE ===
+TARGET:
+'"        .switch {"'
+REPLACEMENT:
+"        .freellmapi-table tr.dragging {\n            opacity: 0.4;\n            background: #fafafa;\n        }\n        .freellmapi-table tr.drag-over-top {\n            border-top: 2px solid var(--text) !important;\n        }\n        .freellmapi-table 
+<truncated 116 bytes>
+================
+
+=== REPLACE ===
+TARGET:
+'"        // --- NEW: Implement fetchModelsStats exactly replicating the UI ---\\n        async functi'
+REPLACEMENT:
+"        let dragSourceRow = null;\n\n        function handleDragStart(e) {\n            dragSourceRow = this;\n            e.dataTransfer.effectAllowed = 'move';\n            e.dataTransfer.setData('text/html', this.innerHTML);\n            this.classList
+<truncated 8400 bytes>
+================
+
+=== REPLACE ===
+TARGET:
+'"                                <th>在</th>"'
+REPLACEMENT:
+"                                <th>启用</th>"
+================
+
+=== REPLACE ===
+TARGET:
+'"                    const obs = row.observations || 0;\\n                    \\n                    c'
+REPLACEMENT:
+"                    const obs = row.observations || 0;\n                    \n                    const monthlyBudget = row.monthly_token_budget || '—';\n                    const rpmLimit = row.rpm_limit;\n                    const rpdLimit = row.rpd_l
+<truncated 1729 bytes>
+================
+
+=== REPLACE ===
+TARGET:
+'"                    const obs = row.observations || 0;\\n                    \\n                    c'
+REPLACEMENT:
+"                    const obs = row.observations || 0;\n                    \n                    const monthlyBudget = row.monthly_token_budget || '—';\n                    const rpmLimit = row.rpm_limit;\n                    const rpdLimit = row.rpd_l
+<truncated 1729 bytes>
+================
+
+=== REPLACE ===
+TARGET:
+'"                                <div class=\\"model-sub\\" style=\\"font-family: monospace; color: var'
+REPLACEMENT:
+"                                <div class=\"model-sub\" style=\"font-family: inherit; font-variant-numeric: tabular-nums; color: var(--text); opacity: 0.85; font-size: 11px; margin-top: 4px;\">\n                                    ${monthlyBudget} tok/mo
+<truncated 131 bytes>
+================
+
+=== REPLACE ===
+TARGET:
+'"            transition: opacity 0.2s ease, transform 0.2s ease;\\n            z-index: 20;\\n        '
+REPLACEMENT:
+"            transition: opacity 0.2s ease, transform 0.2s ease;\n            z-index: 9999;\n            max-width: 360px;"
+================
+
+=== REPLACE ===
+TARGET:
+'"                    </div>\\n                    <div style=\\"display: flex; gap: 8px;\\">\\n         '
+REPLACEMENT:
+"                    </div>\n                </div>"
+================
+
+=== REPLACE ===
+TARGET:
+'"        document.getElementById(\'resetOrderBtn\').addEventListener(\'click\', async (event) => {\\n    '
+REPLACEMENT:
+""
+================
+
+=== REPLACE ===
+TARGET:
+'"            font-size: 14px;\\n        }\\n    </style>"'
+REPLACEMENT:
+"            font-size: 14px;\n        }\n\n        /* --- Playground Layout & Chat Interface --- */\n        .playground-layout {\n            display: grid;\n            grid-template-columns: 1fr 340px;\n            gap: 24px;\n            align-items: 
+<truncated 5947 bytes>
+================
+
+=== REPLACE ===
+TARGET:
+'"        <!-- PLAYGROUND TAB -->\\n        <div id=\\"main-tab-playground\\" class=\\"top-level-tab-cont'
+REPLACEMENT:
+"        <!-- PLAYGROUND TAB -->\n        <div id=\"main-tab-playground\" class=\"top-level-tab-content\">\n            <div class=\"header-section\">\n                <h1>调试与验证</h1>\n                <p>测试你已配置的模型，并在工作
+<truncated 4377 bytes>
+================
+
+=== REPLACE ===
+TARGET:
+'"        </div> <!-- END PLAYGROUND TAB -->              <button class=\\"btn btn-secondary\\" id=\\"re'
+REPLACEMENT:
+"        </div> <!-- END PLAYGROUND TAB -->"
+================
+
+=== REPLACE ===
+TARGET:
+'"        const state = {\\n            statuses: {},\\n            activeProvider: localStorage.getIte'
+REPLACEMENT:
+"        const state = {\n            statuses: {},\n            activeProvider: localStorage.getItem('py-ui-active-provider') || 'all',\n            selectedProvider: localStorage.getItem('py-ui-selected-provider') || '',\n            selectedModel: local
+<truncated 1283 bytes>
+================
+
+=== REPLACE ===
+TARGET:
+'"        async function sendChat(button) {\\n            const providerId = chatProvider.value.trim()'
+REPLACEMENT:
+"        async function chooseModel(providerId, modelId) {\n            state.selectedProvider = providerId;\n            state.selectedModel = modelId;\n            if (playgroundModelSelect) {\n                const val = `${providerId}/${modelId}`;\n   
+<truncated 23370 bytes>
+================
+
+=== REPLACE ===
+TARGET:
+'"        document.getElementById(\'reloadPageBtn\').addEventListener(\'click\', async () => {\\n         '
+REPLACEMENT:
+""
+================
+
+=== REPLACE ===
+TARGET:
+'"        async function bootstrap(forceModels = false) {\\n            await loadProxyKey();\\n       '
+REPLACEMENT:
+"        async function bootstrap(forceModels = false) {\n            await loadProxyKey();\n            await loadStatuses();\n            await loadPreferredModel();\n            await ensureVisibleModels(forceModels);\n            renderPlaygroundMessag
+<truncated 571 bytes>
+================
+
+=== REPLACE ===
+TARGET:
+'"        startApp().catch((error) => {\\n            setDiagnostics(\'status-error\', [\\n              '
+REPLACEMENT:
+"        bootstrap().catch((error) => {\n            setDiagnostics('status-error', [\n                '页面初始化失败',\n                error.message || '未知错误',\n            ]);\n            showToast('初始化失败', 'error');\n        
+<truncated 4 bytes>
+================
+
+=== REPLACE ===
+TARGET:
+'"                        <tbody id=\\"modelsStatsBody\\">\\n                   <!-- PLAYGROUND TAB -->\\'
+REPLACEMENT:
+"                        </tbody>\n                    </table>\n                </div>\n            </section>\n        </div>\n\n        <!-- PLAYGROUND TAB -->\n        <div id=\"main-tab-playground\" class=\"top-level-tab-content\">"
+================
+
+=== REPLACE ===
+TARGET:
+'"                        </tbody>"'
+REPLACEMENT:
+"                        <tbody id=\"modelsStatsBody\">\n                        </tbody>"
+================
+
+=== REPLACE ===
+TARGET:
+'"        const state = {\\n            statuses: {},\\n            activeProvider: localStorage.getIte'
+REPLACEMENT:
+"        const state = {\n            statuses: {},\n            activeProvider: localStorage.getItem('py-ui-active-provider') || 'all',\n            selectedProvider: localStorage.getItem('py-ui-selected-provider') || '',\n            selectedModel: local
+<truncated 240 bytes>
+================
+
+=== REPLACE ===
+TARGET:
+'"        let currentModelsOrder = [];\\n\\n        window.moveModel = async function(index, direction)'
+REPLACEMENT:
+"        window.moveModel = async function(index, direction) {"
+================
+
+=== REPLACE ===
+TARGET:
+'"        <div id=\\"main-tab-keys\\" class=\\"top-level-tab-content\\">\\n            <div class=\\"header'
+REPLACEMENT:
+"        <div id=\"main-tab-keys\" class=\"top-level-tab-content\">\n            <div class=\"header-section\">\n                <h1>密钥配置</h1>\n                <p>管理 Provider 凭证以及用于客户端连接的统一 API Key。</p>\n          
+<truncated 9383 bytes>
+================
+
+=== REPLACE ===
+TARGET:
+'"        <!-- KEYS TAB -->\\n        <div id=\\"main-tab-keys\\" class=\\"top-level-tab-content\\">\\n    '
+REPLACEMENT:
+"        <!-- KEYS TAB -->\n        <div id=\"main-tab-keys\" class=\"top-level-tab-content\">\n            <div class=\"header-section\">\n                <h1>密钥配置</h1>\n                <p>管理 Provider 凭证以及用于客户端连接的统一
+<truncated 9412 bytes>
+================
+
+=== REPLACE ===
+TARGET:
+'"        function refreshChatOptions() {\\n            const configured = configuredProviders();\\n   '
+REPLACEMENT:
+"        async function loadProxyKey() {\n            try {\n                const data = await requestJson('/api/proxy-key');\n                const display = document.getElementById('proxyKeyDisplay');\n                if (data && data.key) {\n          
+<truncated 23571 bytes>
+================
+
+=== REPLACE ===
+TARGET:
+'"        // Global Event Listeners\\n        providerGrid.addEventListener(\'click\', async (event) => '
+REPLACEMENT:
+"        // Global Event Listeners"
+================
+
+=== REPLACE ===
+TARGET:
+'"        function renderProviderCards() {\\n            providerGrid.innerHTML = PROVIDERS.map((provi'
+REPLACEMENT:
+""
+================
+
+=== REPLACE ===
+TARGET:
+'"        const toast = document.getElementById(\'toast\');\\n        const providerGrid = document.getE'
+REPLACEMENT:
+"        const toast = document.getElementById('toast');\n        const providerTabs = document.getElementById('providerTabs');"
+================
+
+=== REPLACE ===
+TARGET:
+'"            <!-- Forms Grid Container (Two Forms Side-by-Side on wide screens) -->\\n            <di'
+REPLACEMENT:
+"            <!-- Forms stacked vertically (matching screenshot layout) -->\n            <div style=\"display: flex; flex-direction: column; gap: 24px; margin-bottom: 24px;\">\n                <!-- Form 1: Add Provider Key -->\n                <section cla
+<truncated 6615 bytes>
+================
+
+=== REPLACE ===
+TARGET:
+''
+REPLACEMENT:
+"        const PROVIDER_LINKS = {\n            'github': 'https://github.com/marketplace/models',\n            'gemini': 'https://aistudio.google.com/',\n            'groq': 'https://console.groq.com/keys',\n            'sambanova': 'https://cloud.sambanov
+<truncated 10121 bytes>
+================
+
+=== REPLACE ===
+TARGET:
+'"        const PROVIDER_LINKS = {\\n            \'github\': \'https://github.com/marketplace/models\',\\n '
+REPLACEMENT:
+"        const PROVIDER_LINKS = {\n            'github': 'https://github.com/marketplace/models',\n            'gemini': 'https://aistudio.google.com/',\n            'groq': 'https://console.groq.com/keys',\n            'sambanova': 'https://cloud.sambanov
+<truncated 10121 bytes>
+================
+
+=== REPLACE ===
+TARGET:
+'"            container.innerHTML = html;\\n        }/span>` : \'\'}\\n                                  '
+REPLACEMENT:
+"        }"
+================
+
+=== REPLACE ===
+TARGET:
+'"        window.refreshChatOptions = refreshChatOptions;"'
+REPLACEMENT:
+"        window.refreshChatOptions = refreshChatOptions;\n        window.updateAddProviderLink = updateAddProviderLink;"
+================
+
+=== REPLACE ===
+TARGET:
+'"            setDiagnostics(\'status-info\', [\\n                \'动作: 页面初始化\',\\n                `结果: 已加载'
+REPLACEMENT:
+"            setDiagnostics('status-info', [\n                '动作: 页面初始化',\n                `结果: 已加载 ${configuredProviders().length} 个已配置 provider`,\n                configuredProviders().length ? '建议: 先点“验证”
+<truncated 178 bytes>
+================
+
+=== REPLACE ===
+TARGET:
+'"                try {\\n                    await requestJson(`/api/provider-keys/${providerId}`, {\\'
+REPLACEMENT:
+"                try {\n                    await requestJson(`/api/provider-keys/${providerId}`, {\n                        method: 'POST',\n                        headers: { 'Content-Type': 'application/json' },\n                        body: JSON.strin
+<truncated 1726 bytes>
+================

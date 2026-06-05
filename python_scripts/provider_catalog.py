@@ -19,7 +19,7 @@ class ProviderMeta:
     model_capabilities: dict[str, dict[str, object]] = field(default_factory=dict)
 
 
-PROVIDERS: tuple[ProviderMeta, ...] = (
+PROVIDERS: list[ProviderMeta] = [
     ProviderMeta(
         'github',
         'https://models.github.ai/inference',
@@ -27,6 +27,13 @@ PROVIDERS: tuple[ProviderMeta, ...] = (
         'openai',
         model_hints=('gpt-4o', 'DeepSeek-V3-0324', 'gpt-4.1-mini', 'gpt-4o-mini'),
         required_query=(('api-version', '2024-12-01-preview'),),
+    ),
+    ProviderMeta(
+        'google',
+        'https://generativelanguage.googleapis.com/v1beta',
+        'GOOGLE_API_KEY',
+        'gemini',
+        model_hints=('gemini-2.0-flash', 'gemini-3.1-flash-lite-preview'),
     ),
     ProviderMeta(
         'gemini',
@@ -43,11 +50,25 @@ PROVIDERS: tuple[ProviderMeta, ...] = (
         model_hints=('llama-3.3-70b-versatile', 'llama-3.1-8b-instant'),
     ),
     ProviderMeta(
+        'cerebras',
+        'https://api.cerebras.ai/v1',
+        'CEREBRAS_API_KEY',
+        'openai',
+        model_hints=('llama3.1-8b', 'llama3.1-70b'),
+    ),
+    ProviderMeta(
         'sambanova',
         'https://api.sambanova.ai/v1',
         'SAMBANOVA_API_KEY',
         'openai',
         model_hints=('DeepSeek-V3.1-Terminus', 'Qwen3-235B', 'Meta-Llama-3.1-8B-Instruct'),
+    ),
+    ProviderMeta(
+        'nvidia',
+        'https://integrate.api.nvidia.com/v1',
+        'NVIDIA_API_KEY',
+        'openai',
+        model_hints=('meta/llama-3.1-70b-instruct',),
     ),
     ProviderMeta(
         'mistral',
@@ -63,9 +84,88 @@ PROVIDERS: tuple[ProviderMeta, ...] = (
         'openai',
         model_hints=('openrouter/auto:free',),
     ),
-)
-
+    ProviderMeta(
+        'cohere',
+        'https://api.cohere.com/v1',
+        'COHERE_API_KEY',
+        'openai',
+        model_hints=('command-r-plus',),
+    ),
+    ProviderMeta(
+        'cloudflare',
+        'https://api.cloudflare.com/client/v4/accounts',
+        'CLOUDFLARE_API_KEY',
+        'openai',
+        model_hints=('@cf/meta/llama-3-8b-instruct',),
+    ),
+    ProviderMeta(
+        'zhipu',
+        'https://open.bigmodel.cn/api/paas/v4',
+        'ZHIPU_API_KEY',
+        'openai',
+        model_hints=('glm-4-flash',),
+    ),
+    ProviderMeta(
+        'ollama',
+        'https://ollama.com/v1',
+        'OLLAMA_API_KEY',
+        'openai',
+        model_hints=('llama3.1',),
+    ),
+    ProviderMeta(
+        'kilo',
+        'https://api.kilo.ai/api/gateway/v1',
+        'KILO_API_KEY',
+        'openai',
+        model_hints=('kilo/auto:free',),
+    ),
+    ProviderMeta(
+        'pollinations',
+        'https://text.pollinations.ai/openai/v1',
+        'POLLINATIONS_API_KEY',
+        'openai',
+        model_hints=('openai-fast',),
+    ),
+    ProviderMeta(
+        'llm7',
+        'https://api.llm7.io/v1',
+        'LLM7_API_KEY',
+        'openai',
+        model_hints=('llm7/auto:free',),
+    ),
+    ProviderMeta(
+        'huggingface',
+        'https://router.huggingface.co/v1',
+        'HUGGINGFACE_API_KEY',
+        'openai',
+        model_hints=('meta-llama/Llama-3-8B-Instruct',),
+    ),
+    ProviderMeta(
+        'opencode',
+        'https://opencode.ai/zen/v1',
+        'OPENCODE_API_KEY',
+        'openai',
+        model_hints=('free-proxy/auto',),
+    ),
+]
 PROVIDER_MAP: dict[str, ProviderMeta] = {provider.name: provider for provider in PROVIDERS}
+
+
+def register_custom_provider(name: str, base_url: str, api_key_env: str, format: FormatType, model_hints: Iterable[str]) -> None:
+    global PROVIDERS, PROVIDER_MAP
+    # Remove existing dynamic provider with same name if exists in-place
+    for p in list(PROVIDERS):
+        if p.name == name:
+            PROVIDERS.remove(p)
+    meta = ProviderMeta(
+        name=name,
+        base_url=base_url,
+        api_key_env=api_key_env,
+        format=format,
+        model_hints=tuple(model_hints),
+    )
+    PROVIDERS.append(meta)
+    PROVIDER_MAP[name] = meta
 
 
 def get_provider(name: str) -> ProviderMeta:

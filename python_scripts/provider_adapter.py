@@ -54,6 +54,13 @@ class ProviderAdapter:
                 'Authorization': f'Bearer {self.api_key}',
                 'X-GitHub-Api-Version': '2024-12-01-preview',
             }
+        if self.provider.name == 'cloudflare':
+            sep = self.api_key.find(':')
+            token = self.api_key[sep+1:] if sep != -1 else self.api_key
+            return {
+                'Content-Type': 'application/json',
+                'Authorization': f'Bearer {token}',
+            }
         return {
             'Content-Type': 'application/json',
             'Authorization': f'Bearer {self.api_key}',
@@ -81,11 +88,16 @@ class ProviderAdapter:
                 query_keys=','.join(sorted(query.keys())) if query else 'none',
             )
         started_at = time.time()
+        base_url = self.provider.base_url
+        if self.provider.name == 'cloudflare':
+            sep = self.api_key.find(':')
+            account_id = self.api_key[:sep] if sep != -1 else ''
+            base_url = f'https://api.cloudflare.com/client/v4/accounts/{account_id}/ai/v1'
         try:
             self._reserve_request_slot()
             status, headers, raw = self.transport.request(
                 method,
-                build_url(self.provider.base_url, path, query),
+                build_url(base_url, path, query),
                 self._headers(),
                 raw_body,
                 timeout_value,
@@ -113,6 +125,22 @@ class ProviderAdapter:
             return status, headers, text
 
     def list_models(self) -> list[str]:
+        if self.provider.name.startswith('custom-'):
+            try:
+                status, _, data = self._request_json('GET', '/models')
+                if status < 400:
+                    items = self._extract_model_items(data)
+                    ids: list[str] = []
+                    for item in items:
+                        raw_model_id = item.get('id') or item.get('name')
+                        if isinstance(raw_model_id, str) and raw_model_id.strip():
+                            ids.append(raw_model_id.strip())
+                    if ids:
+                        return ids
+            except Exception:
+                pass
+            return list(self.provider.model_hints)
+
         status, _, data = self._request_json('GET', '/models', query=get_provider_required_query(self.provider.name))
         if status >= 400:
             if self.provider.name in {'github', 'groq'}:

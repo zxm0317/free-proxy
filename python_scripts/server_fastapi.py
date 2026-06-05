@@ -412,6 +412,98 @@ async def save_provider_key(provider: str, request: Request):
         return JSONResponse({'ok': False, 'error': str(exc)}, status_code=400)
 
 
+@app.delete('/api/provider-keys/{provider}')
+async def delete_provider_key(provider: str):
+    svc = get_service()
+    try:
+        result = svc.delete_provider_key(provider)
+        return result
+    except Exception as exc:
+        return JSONResponse({'ok': False, 'error': str(exc)}, status_code=500)
+
+
+@app.get('/api/custom-models')
+async def get_custom_models():
+    svc = get_service()
+    return {'ok': True, 'models': svc.get_custom_models()}
+
+
+@app.post('/api/custom-models')
+async def add_custom_model(request: Request):
+    payload, error_response = await _read_json_payload(request)
+    if error_response is not None:
+        return error_response
+    base_url = str(payload.get('base_url', '')).strip()
+    model = str(payload.get('model', '')).strip()
+    if not base_url or not model:
+        return JSONResponse({'ok': False, 'error': 'missing base_url or model'}, status_code=400)
+    display_name = str(payload.get('display_name', '')).strip()
+    api_key = str(payload.get('api_key', '')).strip()
+    
+    svc = get_service()
+    try:
+        result = svc.add_custom_model(base_url, model, display_name, api_key)
+        return result
+    except Exception as exc:
+        return JSONResponse({'ok': False, 'error': str(exc)}, status_code=500)
+
+
+@app.delete('/api/custom-models/{model_id}')
+async def delete_custom_model(model_id: str):
+    svc = get_service()
+    try:
+        result = svc.delete_custom_model(model_id)
+        return result
+    except Exception as exc:
+        return JSONResponse({'ok': False, 'error': str(exc)}, status_code=500)
+
+
+@app.post('/api/providers/{provider_name}/toggle')
+async def toggle_provider(provider_name: str, request: Request):
+    payload, error_response = await _read_json_payload(request)
+    if error_response is not None:
+        return error_response
+    enabled = bool(payload.get('enabled', True))
+    svc = get_service()
+    try:
+        result = svc.toggle_provider(provider_name, enabled)
+        return result
+    except Exception as exc:
+        return JSONResponse({'ok': False, 'error': str(exc)}, status_code=500)
+
+
+@app.post('/api/models/toggle')
+async def toggle_model(request: Request):
+    payload, error_response = await _read_json_payload(request)
+    if error_response is not None:
+        return error_response
+    model_id = str(payload.get('model_id', '')).strip()
+    enabled = bool(payload.get('enabled', True))
+    if not model_id:
+        return JSONResponse({'ok': False, 'error': 'model_id is required'}, status_code=400)
+    svc = get_service()
+    try:
+        result = svc.toggle_model(model_id, enabled)
+        return result
+    except Exception as exc:
+        return JSONResponse({'ok': False, 'error': str(exc)}, status_code=500)
+
+
+@app.post('/api/custom-models/{model_id}/key')
+async def update_custom_model_key(model_id: str, request: Request):
+    payload, error_response = await _read_json_payload(request)
+    if error_response is not None:
+        return error_response
+    api_key = str(payload.get('api_key', '')).strip()
+    svc = get_service()
+    try:
+        result = svc.update_custom_model_key(model_id, api_key)
+        return result
+    except Exception as exc:
+        return JSONResponse({'ok': False, 'error': str(exc)}, status_code=500)
+
+
+
 @app.post('/providers/{provider}/probe')
 async def probe_provider(provider: str, request: Request):
     payload, error_response = await _read_json_payload(request)
@@ -600,10 +692,19 @@ async def openai_chat_completions(request: Request):
     result = await run_in_threadpool(relay.handle_chat, req)
 
     if result.stream_chunks is not None:
+        headers = {
+            'Cache-Control': 'no-cache',
+            'Connection': 'keep-alive',
+            'X-Accel-Buffering': 'no'
+        }
+        if result.headers:
+            for k, v in result.headers.items():
+                if k.lower() not in ('content-type', 'content-length', 'transfer-encoding', 'connection', 'cache-control'):
+                    headers[k] = v
         return StreamingResponse(
             _iter_chunks(result.stream_chunks),
             media_type=result.headers.get('Content-Type', 'text/event-stream'),
-            headers={'Cache-Control': 'no-cache', 'Connection': 'keep-alive', 'X-Accel-Buffering': 'no'},
+            headers=headers,
         )
     if result.body is not None:
         return JSONResponse(content=json.loads(result.body), status_code=result.status or 200, headers=dict(result.headers))

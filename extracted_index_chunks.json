@@ -1,0 +1,150 @@
+[
+  {
+    "TargetContent": "\"        async function probeSelectedModel(button) {\\n            const providerId = chatProvider.value.trim();\\n            const modelId = chatModel.value.trim();\\n            if (!providerId || !modelId) {\\n                showToast('请先选择 provid\n<truncated 136 bytes>",
+    "ReplacementContent": "\"        async function probeSelectedModel(button) {\\n            const providerId = chatProvider.value.trim();\\n            const modelId = chatModel.value.trim();\\n            if (!providerId || !modelId) {\\n                showToast('请先选择 provid\n<truncated 5035 bytes>"
+  },
+  {
+    "TargetContent": "                                    ${obs > 0 ? \\`<span class=\"pill-tag pill-text\">\\${obs}次观察</span>\\` : ''}",
+    "ReplacementContent": "                                    ${obs > 0 ? '<span class=\"pill-tag pill-text\">' + obs + '次观察</span>' : ''}"
+  },
+  {
+    "TargetContent": "\"        async function fetchModelsStats() {\\n            try {\\n                const res = await fetch('/api/models-stats');\\n                const data = await res.json();\\n                const tbody = document.getElementById('modelsStatsBody');\\n     \n<truncated 3730 bytes>",
+    "ReplacementContent": "        // Removed duplicate fetchModelsStats to prevent overriding the main implementation"
+  },
+  {
+    "TargetContent": "        .switch {",
+    "ReplacementContent": "\"        .freellmapi-table tr.dragging {\\n            opacity: 0.4;\\n            background: #fafafa;\\n        }\\n        .freellmapi-table tr.drag-over-top {\\n            border-top: 2px solid var(--text) !important;\\n        }\\n        .freellmapi-table \n<truncated 116 bytes>"
+  },
+  {
+    "TargetContent": "\"        // --- NEW: Implement fetchModelsStats exactly replicating the UI ---\\n        async function fetchModelsStats() {\\n            try {\\n                // Fetch the real routing data from backend\\n                const data = await requestJson('/ap\n<truncated 4926 bytes>",
+    "ReplacementContent": "\"        let dragSourceRow = null;\\n\\n        function handleDragStart(e) {\\n            dragSourceRow = this;\\n            e.dataTransfer.effectAllowed = 'move';\\n            e.dataTransfer.setData('text/html', this.innerHTML);\\n            this.classList\n<truncated 8400 bytes>"
+  },
+  {
+    "TargetContent": "                                <th>在</th>",
+    "ReplacementContent": "                                <th>启用</th>"
+  },
+  {
+    "TargetContent": "\"                    const obs = row.observations || 0;\\n                    \\n                    const isEnabled = row.source !== 'none';\\n                    \\n                    let guardDisplay = '—';\\n                    if (headroom < 0.999) {\\n \n<truncated 1285 bytes>",
+    "ReplacementContent": "\"                    const obs = row.observations || 0;\\n                    \\n                    const monthlyBudget = row.monthly_token_budget || '—';\\n                    const rpmLimit = row.rpm_limit;\\n                    const rpdLimit = row.rpd_l\n<truncated 1729 bytes>"
+  },
+  {
+    "TargetContent": "\"                    const obs = row.observations || 0;\\n                    \\n                    const isEnabled = row.source !== 'none';\\n                    \\n                    let guardDisplay = '—';\\n                    if (headroom < 0.999) {\\n \n<truncated 1285 bytes>",
+    "ReplacementContent": "\"                    const obs = row.observations || 0;\\n                    \\n                    const monthlyBudget = row.monthly_token_budget || '—';\\n                    const rpmLimit = row.rpm_limit;\\n                    const rpdLimit = row.rpd_l\n<truncated 1729 bytes>"
+  },
+  {
+    "TargetContent": "\"                                <div class=\\\"model-sub\\\" style=\\\"font-family: monospace; color: var(--muted); font-size: 11px; margin-top: 4px;\\\">\\n                                    ${monthlyBudget} tok/mo ${rpmLimit ? '· ' + rpmLimit + ' rpm' : ''} ${\n<truncated 83 bytes>",
+    "ReplacementContent": "\"                                <div class=\\\"model-sub\\\" style=\\\"font-family: inherit; font-variant-numeric: tabular-nums; color: var(--text); opacity: 0.85; font-size: 11px; margin-top: 4px;\\\">\\n                                    ${monthlyBudget} tok/mo\n<truncated 131 bytes>"
+  },
+  {
+    "TargetContent": "            transition: opacity 0.2s ease, transform 0.2s ease;\n            z-index: 20;\n            max-width: 360px;",
+    "ReplacementContent": "            transition: opacity 0.2s ease, transform 0.2s ease;\n            z-index: 9999;\n            max-width: 360px;"
+  },
+  {
+    "TargetContent": "\"                    </div>\\n                    <div style=\\\"display: flex; gap: 8px;\\\">\\n                        <button class=\\\"btn btn-ghost\\\" id=\\\"resetOrderBtn\\\">重置默认排序</button>\\n                        <button class=\\\"btn btn-secondary\\\"\n<truncated 106 bytes>",
+    "ReplacementContent": "                    </div>\n                </div>"
+  },
+  {
+    "TargetContent": "\"        document.getElementById('resetOrderBtn').addEventListener('click', async (event) => {\\n            const btn = event.currentTarget;\\n            btn.disabled = true;\\n            btn.textContent = '重置中...';\\n            try {\\n              \n<truncated 730 bytes>",
+    "ReplacementContent": ""
+  },
+  {
+    "TargetContent": "            font-size: 14px;\n        }\n    </style>",
+    "ReplacementContent": "\"            font-size: 14px;\\n        }\\n\\n        /* --- Playground Layout & Chat Interface --- */\\n        .playground-layout {\\n            display: grid;\\n            grid-template-columns: 1fr 340px;\\n            gap: 24px;\\n            align-items: \n<truncated 5947 bytes>"
+  },
+  {
+    "TargetContent": "\"        <!-- PLAYGROUND TAB -->\\n        <div id=\\\"main-tab-playground\\\" class=\\\"top-level-tab-content\\\">\\n            <div class=\\\"header-section\\\">\\n                <h1>调试与验证</h1>\\n                <p>测试你已配置的模型，并在工作\n<truncated 4295 bytes>",
+    "ReplacementContent": "\"        <!-- PLAYGROUND TAB -->\\n        <div id=\\\"main-tab-playground\\\" class=\\\"top-level-tab-content\\\">\\n            <div class=\\\"header-section\\\">\\n                <h1>调试与验证</h1>\\n                <p>测试你已配置的模型，并在工作\n<truncated 4377 bytes>"
+  },
+  {
+    "TargetContent": "\"        </div> <!-- END PLAYGROUND TAB -->              <button class=\\\"btn btn-secondary\\\" id=\\\"refreshModelsBtn\\\">刷新</button>\\n                            </div>\\n                        </div>\\n                        <div class=\\\"tabs\\\" id=\\\"provi\n<truncated 412 bytes>",
+    "ReplacementContent": "        </div> <!-- END PLAYGROUND TAB -->"
+  },
+  {
+    "TargetContent": "\"        const state = {\\n            statuses: {},\\n            activeProvider: localStorage.getItem('py-ui-active-provider') || 'all',\\n            selectedProvider: localStorage.getItem('py-ui-selected-provider') || '',\\n            selectedModel: local\n<truncated 909 bytes>",
+    "ReplacementContent": "\"        const state = {\\n            statuses: {},\\n            activeProvider: localStorage.getItem('py-ui-active-provider') || 'all',\\n            selectedProvider: localStorage.getItem('py-ui-selected-provider') || '',\\n            selectedModel: local\n<truncated 1283 bytes>"
+  },
+  {
+    "TargetContent": "\"        async function sendChat(button) {\\n            const providerId = chatProvider.value.trim();\\n            const modelId = chatModel.value.trim();\\n            const prompt = chatPrompt.value.trim();\\n            if (!providerId || !modelId) {\\n   \n<truncated 5658 bytes>",
+    "ReplacementContent": "\"        async function chooseModel(providerId, modelId) {\\n            state.selectedProvider = providerId;\\n            state.selectedModel = modelId;\\n            if (playgroundModelSelect) {\\n                const val = `${providerId}/${modelId}`;\\n   \n<truncated 23370 bytes>"
+  },
+  {
+    "TargetContent": "        document.getElementById('reloadPageBtn').addEventListener('click', async () => {\n            await bootstrap(true);\n            showToast('状态已刷新', 'info');\n        });",
+    "ReplacementContent": ""
+  },
+  {
+    "TargetContent": "\"        async function bootstrap(forceModels = false) {\\n            await loadProxyKey();\\n            await loadStatuses();\\n            await loadPreferredModel();\\n            await ensureVisibleModels(forceModels);\\n            \\n            // Fire \n<truncated 530 bytes>",
+    "ReplacementContent": "\"        async function bootstrap(forceModels = false) {\\n            await loadProxyKey();\\n            await loadStatuses();\\n            await loadPreferredModel();\\n            await ensureVisibleModels(forceModels);\\n            renderPlaygroundMessag\n<truncated 571 bytes>"
+  },
+  {
+    "TargetContent": "\"        startApp().catch((error) => {\\n            setDiagnostics('status-error', [\\n                '页面初始化失败',\\n                error.message || '未知错误',\\n            ]);\\n            showToast('初始化失败', 'error');\\n        }\n<truncated 3 bytes>",
+    "ReplacementContent": "\"        bootstrap().catch((error) => {\\n            setDiagnostics('status-error', [\\n                '页面初始化失败',\\n                error.message || '未知错误',\\n            ]);\\n            showToast('初始化失败', 'error');\\n        \n<truncated 4 bytes>"
+  },
+  {
+    "TargetContent": "                        <tbody id=\"modelsStatsBody\">\n                   <!-- PLAYGROUND TAB -->\n        <div id=\"main-tab-playground\" class=\"top-level-tab-content\">",
+    "ReplacementContent": "                        </tbody>\n                    </table>\n                </div>\n            </section>\n        </div>\n\n        <!-- PLAYGROUND TAB -->\n        <div id=\"main-tab-playground\" class=\"top-level-tab-content\">"
+  },
+  {
+    "TargetContent": "                        </tbody>",
+    "ReplacementContent": "                        <tbody id=\"modelsStatsBody\">\n                        </tbody>"
+  },
+  {
+    "TargetContent": "\"        const state = {\\n            statuses: {},\\n            activeProvider: localStorage.getItem('py-ui-active-provider') || 'all',\\n            selectedProvider: localStorage.getItem('py-ui-selected-provider') || '',\\n            selectedModel: local\n<truncated 200 bytes>",
+    "ReplacementContent": "\"        const state = {\\n            statuses: {},\\n            activeProvider: localStorage.getItem('py-ui-active-provider') || 'all',\\n            selectedProvider: localStorage.getItem('py-ui-selected-provider') || '',\\n            selectedModel: local\n<truncated 240 bytes>"
+  },
+  {
+    "TargetContent": "        let currentModelsOrder = [];\n\n        window.moveModel = async function(index, direction) {",
+    "ReplacementContent": "        window.moveModel = async function(index, direction) {"
+  },
+  {
+    "TargetContent": "\"        <div id=\\\"main-tab-keys\\\" class=\\\"top-level-tab-content\\\">\\n            <div class=\\\"header-section\\\">\\n                <h1>密钥配置</h1>\\n                <p>管理 Provider 凭证以及用于客户端连接的统一 API Key。</p>\\n          \n<truncated 1504 bytes>",
+    "ReplacementContent": "\"        <div id=\\\"main-tab-keys\\\" class=\\\"top-level-tab-content\\\">\\n            <div class=\\\"header-section\\\">\\n                <h1>密钥配置</h1>\\n                <p>管理 Provider 凭证以及用于客户端连接的统一 API Key。</p>\\n          \n<truncated 9383 bytes>"
+  },
+  {
+    "TargetContent": "\"        <!-- KEYS TAB -->\\n        <div id=\\\"main-tab-keys\\\" class=\\\"top-level-tab-content\\\">\\n            <div class=\\\"header-section\\\">\\n                <h1>密钥配置</h1>\\n                <p>管理 Provider 凭证以及用于客户端连接的统一\n<truncated 1951 bytes>",
+    "ReplacementContent": "\"        <!-- KEYS TAB -->\\n        <div id=\\\"main-tab-keys\\\" class=\\\"top-level-tab-content\\\">\\n            <div class=\\\"header-section\\\">\\n                <h1>密钥配置</h1>\\n                <p>管理 Provider 凭证以及用于客户端连接的统一\n<truncated 9412 bytes>"
+  },
+  {
+    "TargetContent": "\"        function refreshChatOptions() {\\n            const configured = configuredProviders();\\n            chatProvider.innerHTML = configured.length\\n                ? configured.map((provider) => `<option value=\\\"${provider.id}\\\">${provider.name}</opti\n<truncated 8448 bytes>",
+    "ReplacementContent": "\"        async function loadProxyKey() {\\n            try {\\n                const data = await requestJson('/api/proxy-key');\\n                const display = document.getElementById('proxyKeyDisplay');\\n                if (data && data.key) {\\n          \n<truncated 23571 bytes>"
+  },
+  {
+    "TargetContent": "\"        // Global Event Listeners\\n        providerGrid.addEventListener('click', async (event) => {\\n            const button = event.target.closest('button[data-action]');\\n            if (!button) return;\\n\\n            const action = button.dataset.ac\n<truncated 739 bytes>",
+    "ReplacementContent": "        // Global Event Listeners"
+  },
+  {
+    "TargetContent": "\"        function renderProviderCards() {\\n            providerGrid.innerHTML = PROVIDERS.map((provider) => {\\n                const status = state.statuses[provider.id] || { configured: false, masked: '' };\\n                const verify = state.verifyResu\n<truncated 2900 bytes>",
+    "ReplacementContent": ""
+  },
+  {
+    "TargetContent": "        const toast = document.getElementById('toast');\n        const providerGrid = document.getElementById('providerGrid');\n        const providerTabs = document.getElementById('providerTabs');",
+    "ReplacementContent": "        const toast = document.getElementById('toast');\n        const providerTabs = document.getElementById('providerTabs');"
+  },
+  {
+    "TargetContent": "\"            <!-- Forms Grid Container (Two Forms Side-by-Side on wide screens) -->\\n            <div style=\\\"display: grid; grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); gap: 24px; margin-bottom: 24px;\\\">\\n                <!-- Form 1: Add P\n<truncated 5145 bytes>",
+    "ReplacementContent": "\"            <!-- Forms stacked vertically (matching screenshot layout) -->\\n            <div style=\\\"display: flex; flex-direction: column; gap: 24px; margin-bottom: 24px;\\\">\\n                <!-- Form 1: Add Provider Key -->\\n                <section cla\n<truncated 6615 bytes>"
+  },
+  {
+    "TargetContent": "",
+    "ReplacementContent": "\"        const PROVIDER_LINKS = {\\n            'github': 'https://github.com/marketplace/models',\\n            'gemini': 'https://aistudio.google.com/',\\n            'groq': 'https://console.groq.com/keys',\\n            'sambanova': 'https://cloud.sambanov\n<truncated 10121 bytes>"
+  },
+  {
+    "TargetContent": "\"        const PROVIDER_LINKS = {\\n            'github': 'https://github.com/marketplace/models',\\n            'gemini': 'https://aistudio.google.com/',\\n            'groq': 'https://console.groq.com/keys',\\n            'sambanova': 'https://cloud.sambanov\n<truncated 7820 bytes>",
+    "ReplacementContent": "\"        const PROVIDER_LINKS = {\\n            'github': 'https://github.com/marketplace/models',\\n            'gemini': 'https://aistudio.google.com/',\\n            'groq': 'https://console.groq.com/keys',\\n            'sambanova': 'https://cloud.sambanov\n<truncated 10121 bytes>"
+  },
+  {
+    "TargetContent": "\"            container.innerHTML = html;\\n        }/span>` : ''}\\n                                    ${linkHtml}\\n                                </div>\\n                                <div style=\\\"display: flex; align-items: center; gap: 8px; font-size:\n<truncated 1818 bytes>",
+    "ReplacementContent": "        }"
+  },
+  {
+    "TargetContent": "        window.refreshChatOptions = refreshChatOptions;",
+    "ReplacementContent": "        window.refreshChatOptions = refreshChatOptions;\n        window.updateAddProviderLink = updateAddProviderLink;"
+  },
+  {
+    "TargetContent": "\"            setDiagnostics('status-info', [\\n                '动作: 页面初始化',\\n                `结果: 已加载 ${configuredProviders().length} 个已配置 provider`,\\n                configuredProviders().length ? '建议: 先点“验证”\n<truncated 140 bytes>",
+    "ReplacementContent": "\"            setDiagnostics('status-info', [\\n                '动作: 页面初始化',\\n                `结果: 已加载 ${configuredProviders().length} 个已配置 provider`,\\n                configuredProviders().length ? '建议: 先点“验证”\n<truncated 178 bytes>"
+  },
+  {
+    "TargetContent": "                try {\n                    await requestJson(`/api/provider-keys/${providerId}`, {\n                const PROVIDER_LINKS = {",
+    "ReplacementContent": "\"                try {\\n                    await requestJson(`/api/provider-keys/${providerId}`, {\\n                        method: 'POST',\\n                        headers: { 'Content-Type': 'application/json' },\\n                        body: JSON.strin\n<truncated 1726 bytes>"
+  }
+]

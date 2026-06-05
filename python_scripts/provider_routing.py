@@ -90,6 +90,7 @@ def resolve_alias_candidates(
     now_ts: int | None = None,
     ttl_seconds: int = 600,
     manual_order: list[str] | None = None,
+    disabled_models: list[str] | None = None
 ) -> list[tuple[str, str]]:
     ordered: list[tuple[str, str]] = []
     if alias != 'auto':
@@ -120,18 +121,23 @@ def resolve_alias_candidates(
 
     for _, _, _, _, provider_name, model_id in sorted(ranked, key=lambda item: (item[0], item[1], item[2], item[3]), reverse=True):
         pair = (provider_name, model_id)
+        key = f"{provider_name}/{model_id}"
+        if disabled_models and key in disabled_models:
+            continue
         if pair not in ordered:
             ordered.append(pair)
     return ordered
 
 
-def build_auto_candidates(*, requested_model: str | None, configured: list[str], health: HealthState, now_ts: int, ttl_seconds: int, manual_order: list[str] | None = None) -> list[CandidateTarget]:
+def build_auto_candidates(*, requested_model: str | None, configured: list[str], health: HealthState, now_ts: int, ttl_seconds: int, manual_order: list[str] | None = None, disabled_models: list[str] | None = None) -> list[CandidateTarget]:
     ordered: list[CandidateTarget] = []
     seen: set[tuple[str, str]] = set()
 
     def push(provider: str, model: str, source: CandidateSource) -> None:
         key = (provider, model)
         if provider not in configured or key in seen:
+            return
+        if disabled_models and f"{provider}/{model}" in disabled_models:
             return
         seen.add(key)
         ordered.append(CandidateTarget(provider, model, source, len(ordered)))

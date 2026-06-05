@@ -75,7 +75,7 @@ class ProxyService:
         outbound_rpm: int = 60,
         debug_log: Callable[..., None] | None = None,
     ) -> None:
-        self.dotenv_path = dotenv_path or DOTENV_PATH
+        self.dotenv_path = Path(dotenv_path) if dotenv_path else DOTENV_PATH
         hydrate_env(self.dotenv_path)
         
         self.db_url = os.environ.get('DATABASE_URL')
@@ -103,17 +103,42 @@ class ProxyService:
         self.request_timeout_seconds = request_timeout_seconds
         self.request_limiter = RequestLimiterGate(outbound_rpm, 60)
         self.debug_log = debug_log
+        self.sync_custom_providers()
+
+    def sync_custom_providers(self) -> None:
+        custom_models_json = get_key(self.db_url, 'custom_openai_models')
+        if custom_models_json:
+            try:
+                custom_models = json.loads(custom_models_json)
+                for cm in custom_models:
+                    from .provider_catalog import register_custom_provider
+                    register_custom_provider(
+                        name=cm['id'],
+                        base_url=cm['base_url'],
+                        api_key_env=f"CUSTOM_KEY_{cm['id']}",
+                        format='openai',
+                        model_hints=[cm['model']]
+                    )
+            except Exception:
+                pass
 
     def available_providers(self) -> list[str]:
-        return configured_provider_names(get_all_keys(self.db_url))
+        providers = configured_provider_names(get_all_keys(self.db_url))
+        disabled = self.get_disabled_providers()
+        providers = [p for p in providers if p not in disabled and not p.startswith('custom-')]
+        custom_models = self.get_custom_models()
+        for cm in custom_models:
+            if cm.get('enabled', True) is not False:
+                providers.append(cm['id'])
+        return providers
 
     def public_models(self) -> list[dict[str, str]]:
         return [dict(item) for item in PUBLIC_MODEL_ALIASES]
 
     def provider_adapter(self, provider_name: str) -> ProviderAdapter:
         provider = get_provider(provider_name)
-        api_key = get_key(self.db_url, provider.api_key_env)
-        if not api_key:
+        api_key = get_key(self.db_url, provider.api_key_env) or ''
+        if not api_key and not provider_name.startswith('custom-'):
             raise ProviderError(f'{provider_name} 没有配置 API Key')
         return ProviderAdapter(
             provider=provider,
@@ -135,6 +160,7 @@ class ProxyService:
             debug_log=self.debug_log,
             usage_incrementer=lambda provider, model: increment_model_usage(self.db_url, provider, model),
             manual_order_loader=self.get_manual_order,
+            disabled_models_loader=self.get_disabled_models,
         )
 
     def get_usage_stats(self) -> list[dict[str, object]]:
@@ -166,12 +192,14 @@ class ProxyService:
 
     def provider_key_statuses(self) -> dict[str, dict[str, object]]:
         db_keys = get_all_keys(self.db_url)
+        disabled = self.get_disabled_providers()
         statuses: dict[str, dict[str, object]] = {}
         for provider in list_providers():
             value = str(db_keys.get(provider.api_key_env, '')).strip()
             statuses[provider.name] = {
                 'configured': bool(value),
                 'masked': self._mask_key(value) if value else '',
+                'enabled': bool(value) and (provider.name not in disabled),
                 'models': [m for m in get_provider_model_hints(provider.name) if m.startswith('free-proxy/')],
             }
         return statuses
@@ -183,6 +211,128 @@ class ProxyService:
             raise ProviderError('api_key 不能为空')
         upsert_key(self.db_url, provider.api_key_env, value)
         return {'ok': True, 'provider': provider_name, 'masked': self._mask_key(value)}
+
+    def delete_provider_key(self, provider_name: str) -> dict[str, object]:
+        provider = get_provider(provider_name)
+        from .db_store import delete_key
+        delete_key(self.db_url, provider.api_key_env)
+        return {'ok': True, 'provider': provider_name}
+
+    def get_disabled_providers(self) -> list[str]:
+        data_str = get_key(self.db_url, 'disabled_providers')
+        if not data_str:
+            return []
+        try:
+            import json
+            return json.loads(data_str)
+        except Exception:
+            return []
+
+    def toggle_provider(self, provider_name: str, enabled: bool) -> dict[str, object]:
+        if provider_name.startswith('custom-'):
+            models = self.get_custom_models()
+            for m in models:
+                if m['id'] == provider_name:
+                    m['enabled'] = enabled
+                    break
+            upsert_key(self.db_url, 'custom_openai_models', json.dumps(models))
+            self.sync_custom_providers()
+            return {'ok': True}
+        else:
+            disabled = self.get_disabled_providers()
+            if enabled:
+                if provider_name in disabled:
+                    disabled.remove(provider_name)
+            else:
+                if provider_name not in disabled:
+                    disabled.append(provider_name)
+            upsert_key(self.db_url, 'disabled_providers', json.dumps(disabled))
+            return {'ok': True}
+
+    def get_disabled_models(self) -> list[str]:
+        data_str = get_key(self.db_url, 'disabled_models')
+        if not data_str:
+            return []
+        try:
+            import json
+            return json.loads(data_str)
+        except Exception:
+            return []
+
+    def toggle_model(self, model_key: str, enabled: bool) -> dict[str, object]:
+        import json
+        disabled = self.get_disabled_models()
+        if enabled:
+            if model_key in disabled:
+                disabled.remove(model_key)
+        else:
+            if model_key not in disabled:
+                disabled.append(model_key)
+        upsert_key(self.db_url, 'disabled_models', json.dumps(disabled))
+        return {'ok': True}
+
+    def get_custom_models(self) -> list[dict[str, object]]:
+        data_str = get_key(self.db_url, 'custom_openai_models')
+        if not data_str:
+            return []
+        try:
+            return json.loads(data_str)
+        except Exception:
+            return []
+
+    def add_custom_model(self, base_url: str, model: str, display_name: str = '', api_key: str = '') -> dict[str, object]:
+        models = self.get_custom_models()
+        custom_ids = {m['id'] for m in models}
+        new_id = None
+        i = 1
+        while True:
+            candidate = f"custom-{i}"
+            if candidate not in custom_ids:
+                new_id = candidate
+                break
+            i += 1
+        
+        new_model = {
+            'id': new_id,
+            'base_url': base_url,
+            'model': model,
+            'display_name': display_name or model,
+            'api_key': api_key,
+            'enabled': True,
+            'created_at': int(time.time())
+        }
+        models.append(new_model)
+        upsert_key(self.db_url, 'custom_openai_models', json.dumps(models))
+        
+        if api_key:
+            upsert_key(self.db_url, f"CUSTOM_KEY_{new_id}", api_key)
+            
+        self.sync_custom_providers()
+        return {'ok': True, 'model': new_model}
+
+    def delete_custom_model(self, model_id: str) -> dict[str, object]:
+        models = self.get_custom_models()
+        filtered = [m for m in models if m['id'] != model_id]
+        upsert_key(self.db_url, 'custom_openai_models', json.dumps(filtered))
+        from .db_store import delete_key
+        delete_key(self.db_url, f"CUSTOM_KEY_{model_id}")
+        self.sync_custom_providers()
+        return {'ok': True, 'id': model_id}
+
+    def update_custom_model_key(self, model_id: str, api_key: str) -> dict[str, object]:
+        models = self.get_custom_models()
+        for m in models:
+            if m['id'] == model_id:
+                m['api_key'] = api_key
+                break
+        upsert_key(self.db_url, 'custom_openai_models', json.dumps(models))
+        if api_key:
+            upsert_key(self.db_url, f"CUSTOM_KEY_{model_id}", api_key)
+        else:
+            from .db_store import delete_key
+            delete_key(self.db_url, f"CUSTOM_KEY_{model_id}")
+        self.sync_custom_providers()
+        return {'ok': True}
 
     def get_proxy_key(self) -> str | None:
         return get_key(self.db_url, 'PROXY_API_KEY')
@@ -396,34 +546,82 @@ class ProxyService:
         
     def models_stats(self) -> dict[str, object]:
         from .provider_routing import build_auto_candidates
+        from .scoring import expected_reliability, synthetic_speed_score, synthetic_intelligence_score, headroom_factor, combine_score, BANDIT_PRESETS, get_model_limits
         health = load_health(self.health_path)
         manual_order = self.get_manual_order()
+        
+        db_keys = get_all_keys(self.db_url)
+        all_configured = configured_provider_names(db_keys)
+        custom_models = self.get_custom_models()
+        for cm in custom_models:
+            if cm['id'] not in all_configured:
+                all_configured.append(cm['id'])
+                
+        disabled = self.get_disabled_providers()
+        active_set = set(all_configured) - set(disabled)
+        for cm in custom_models:
+            if cm.get('enabled', True) is False and cm['id'] in active_set:
+                active_set.remove(cm['id'])
+
+        disabled_models = self.get_disabled_models()
+
         candidates = build_auto_candidates(
             requested_model=None,
-            configured=self.available_providers(),
+            configured=all_configured,
             health=health,
             now_ts=int(time.time()),
             ttl_seconds=self.health_ttl_seconds,
             manual_order=manual_order
         )
         stats = []
-        for c in candidates:
+        for i, c in enumerate(candidates):
             key = f"{c.provider}/{c.model}"
             entry = health.get(key, {})
-            score = 0
-            from .provider_routing import _health_score
-            if isinstance(entry, dict):
-                score = _health_score(entry, int(time.time()), self.health_ttl_seconds)
+            
+            # Use freellmapi Bandit logic for display!
+            success_streak = int(entry.get('success_streak', 0)) if isinstance(entry, dict) else 0
+            failure_streak = int(entry.get('failure_streak', 0)) if isinstance(entry, dict) else 0
+            # To simulate historical totals, we just use the current streaks as totals for visual display
+            reliability = expected_reliability(success_streak, failure_streak)
+            speed = synthetic_speed_score(c.provider, c.model)
+            intel = synthetic_intelligence_score(c.provider, c.model)
+            
+            # Headroom based on rate limits
+            rate_limits = entry.get('rate_limits', {}) if isinstance(entry, dict) else {}
+            remaining_req = None
+            if 'x-ratelimit-remaining-requests' in rate_limits:
+                try:
+                    remaining_req = int(rate_limits['x-ratelimit-remaining-requests'])
+                except ValueError:
+                    pass
+            headroom = headroom_factor(remaining_req)
+            
+            score = combine_score(reliability, speed, intel, headroom, 1.0, BANDIT_PRESETS['balanced'])
+            
+            limits = get_model_limits(c.provider, c.model)
+            
             stats.append({
                 'provider': c.provider,
                 'model': c.model,
                 'source': c.source,
                 'rank': c.rank,
                 'score': score,
-                'ok': entry.get('ok'),
-                'rate_limits': entry.get('rate_limits', {})
+                'rel': int(reliability * 100),
+                'spd': int(speed * 100),
+                'int': int(intel * 100),
+                'headroom': float(f"{headroom:.2f}"),
+                'ok': entry.get('ok') if isinstance(entry, dict) else None,
+                'rate_limits': rate_limits,
+                'observations': success_streak + failure_streak,
+                'monthly_token_budget': limits['monthly_token_budget'],
+                'rpm_limit': limits['rpm_limit'],
+                'rpd_limit': limits['rpd_limit'],
+                'enabled': (c.provider in active_set) and (key not in disabled_models)
             })
-        return {'models': stats}
+            
+        # Re-sort using our calculated bandit score instead of the simple health rank
+        stats.sort(key=lambda x: x['score'], reverse=True)
+        return {'models': stats, 'strategy': 'balanced'}
 
     def resolve_openai_target(self, payload: JsonObject) -> ResolvedOpenAIRequest:
         raw_model = payload.get('model')
@@ -484,7 +682,8 @@ class ProxyService:
             health=load_health(self.health_path),
             now_ts=int(time.time()),
             ttl_seconds=self.health_ttl_seconds,
-            manual_order=self.get_manual_order()
+            manual_order=self.get_manual_order(),
+            disabled_models=self.get_disabled_models()
         )
         if not candidates:
             return OpenAIForwardResult(

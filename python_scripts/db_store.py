@@ -170,6 +170,17 @@ def upsert_key(db_url: str, key_name: str, value: str) -> None:
     
     _local_cache[key_name] = value
 
+def delete_key(db_url: str, key_name: str) -> None:
+    """Deletes a key from the database and local cache."""
+    adapter = get_adapter(db_url)
+    try:
+        adapter.execute("DELETE FROM config_keys WHERE key_name = %s", (key_name,))
+        adapter.commit()
+    finally:
+        adapter.close()
+    if key_name in _local_cache:
+        del _local_cache[key_name]
+
 def get_key(db_url: str, key_name: str) -> str | None:
     """Retrieves a single key from the local cache or database."""
     if _cache_initialized:
