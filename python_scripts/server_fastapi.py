@@ -177,7 +177,7 @@ async def security_and_log_middleware(request: Request, call_next):
             status=response.status_code,
         )
     
-    response.headers['Content-Security-Policy'] = "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self' https:;"
+    response.headers['Content-Security-Policy'] = "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; img-src 'self' data: https:; connect-src 'self' https:;"
     response.headers['X-Frame-Options'] = 'DENY'
     response.headers['X-Content-Type-Options'] = 'nosniff'
     response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
@@ -489,6 +489,61 @@ async def toggle_model(request: Request):
         return JSONResponse({'ok': False, 'error': str(exc)}, status_code=500)
 
 
+@app.post('/api/models/test')
+async def test_model(request: Request):
+    payload, error_response = await _read_json_payload(request)
+    if error_response is not None:
+        return error_response
+    model_key = str(payload.get('model_key', '')).strip()
+    if not model_key or '/' not in model_key:
+        return JSONResponse({'ok': False, 'error': 'model_key is required (format: provider/model)'}, status_code=400)
+    provider_name, model_id = model_key.split('/', 1)
+    svc = get_service()
+    start_time = time.time()
+    try:
+        import asyncio
+        result = await asyncio.wait_for(
+            run_in_threadpool(svc.probe, provider_name, model_id, timeout=3),
+            timeout=6,
+        )
+        latency = int((time.time() - start_time) * 1000)
+        if result.ok:
+            await run_in_threadpool(svc.record_model_probe_result, model_key, ok=True, latency_ms=latency, status=200)
+            return {
+                'ok': True,
+                'status': 200,
+                'latency_ms': latency,
+                'message': 'Success'
+            }
+        else:
+            status_code = result.status if result.status is not None else 500
+            await run_in_threadpool(svc.record_model_probe_result, model_key, ok=False, latency_ms=latency, status=status_code, error=result.error or '探测失败')
+            return {
+                'ok': False,
+                'status': status_code,
+                'latency_ms': latency,
+                'error': result.error or '探测失败'
+            }
+    except TimeoutError:
+        latency = int((time.time() - start_time) * 1000)
+        await run_in_threadpool(svc.record_model_probe_result, model_key, ok=False, latency_ms=latency, status=504, error='探测超时')
+        return {
+            'ok': False,
+            'status': 504,
+            'latency_ms': latency,
+            'error': '探测超时'
+        }
+    except Exception as exc:
+        latency = int((time.time() - start_time) * 1000)
+        await run_in_threadpool(svc.record_model_probe_result, model_key, ok=False, latency_ms=latency, status=500, error=str(exc))
+        return {
+            'ok': False,
+            'status': 500,
+            'latency_ms': latency,
+            'error': str(exc)
+        }
+
+
 @app.post('/api/custom-models/{model_id}/key')
 async def update_custom_model_key(model_id: str, request: Request):
     payload, error_response = await _read_json_payload(request)
@@ -673,7 +728,7 @@ async def openai_chat_completions(request: Request):
         return error_response
         
     await _log_debug_request(request, body_bytes, "Success /v1/chat/completions")
-    print("DEBUG_PAYLOAD:", json.dumps(payload, ensure_ascii=False)[:1000], flush=True)
+    print("DEBUG_PAYLOAD:", json.dumps(payload, ensure_ascii=True)[:1000], flush=True)
     user_agent = request.headers.get('User-Agent', '')
     client_hint = 'opencode' if 'opencode' in user_agent.lower() else 'openclaw' if 'openclaw' in user_agent.lower() else ''
     try:
@@ -800,3 +855,522 @@ def _iter_chunks(chunks):
 def _extract_prompt_from_payload(payload: dict) -> str:
     from .prompt_utils import extract_prompt
     return extract_prompt(payload)
+
+
+def to_sqlite_datetime(timestamp: float) -> str:
+    import datetime
+    dt = datetime.datetime.fromtimestamp(timestamp, datetime.timezone.utc)
+    return dt.strftime('%Y-%m-%d %H:%M:%S')
+
+def get_since_timestamp(range_str: str) -> str:
+    import time
+    now = time.time()
+    if range_str == '24h':
+        delta = 24 * 60 * 60
+    elif range_str == '30d':
+        delta = 30 * 24 * 60 * 60
+    else: # '7d' or default
+        delta = 7 * 24 * 60 * 60
+    return to_sqlite_datetime(now - delta)
+
+def execute_query(adapter, query, params=()):
+    from .db_store import SqliteAdapter
+    if not isinstance(adapter, SqliteAdapter):
+        query = query.replace('%', '%%').replace('%%s', '%s')
+    return adapter.fetchall(query, params)
+
+def fetchone_query(adapter, query, params=()):
+    from .db_store import SqliteAdapter
+    if not isinstance(adapter, SqliteAdapter):
+        query = query.replace('%', '%%').replace('%%s', '%s')
+    return adapter.fetchone(query, params)
+
+_analytics_dashboard_cache: dict[str, tuple[float, dict[str, object]]] = {}
+ANALYTICS_DASHBOARD_CACHE_TTL = 30
+
+
+@app.get('/api/analytics/summary', dependencies=[Depends(check_admin_auth)])
+async def get_analytics_summary(range: str = '7d'):
+    since = get_since_timestamp(range)
+    svc = get_service()
+    from .db_store import get_adapter
+    adapter = get_adapter(svc.db_url)
+    try:
+        row = fetchone_query(
+            adapter,
+            """
+            SELECT
+              COUNT(*) as total_requests,
+              SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) as success_count,
+              SUM(input_tokens) as total_input_tokens,
+              SUM(output_tokens) as total_output_tokens,
+              AVG(latency_ms) as avg_latency_ms
+            FROM requests
+            WHERE created_at >= %s
+            """,
+            (since,)
+        )
+        total_requests = row[0] or 0
+        success_count = row[1] or 0
+        total_input_tokens = row[2] or 0
+        total_output_tokens = row[3] or 0
+        avg_latency_ms = row[4] or 0
+
+        success_rate = (success_count / total_requests * 100) if total_requests > 0 else 0
+        input_cost = (total_input_tokens / 1000000) * 3
+        output_cost = (total_output_tokens / 1000000) * 15
+        estimated_cost_savings = input_cost + output_cost
+
+        return {
+            'totalRequests': total_requests,
+            'successRate': round(success_rate, 1),
+            'totalInputTokens': total_input_tokens,
+            'totalOutputTokens': total_output_tokens,
+            'avgLatencyMs': round(avg_latency_ms),
+            'estimatedCostSavings': round(estimated_cost_savings, 2),
+        }
+    finally:
+        adapter.close()
+
+@app.get('/api/analytics/by-model', dependencies=[Depends(check_admin_auth)])
+async def get_analytics_by_model(range: str = '7d'):
+    since = get_since_timestamp(range)
+    svc = get_service()
+    from .db_store import get_adapter
+    adapter = get_adapter(svc.db_url)
+    try:
+        rows = execute_query(
+            adapter,
+            """
+            SELECT
+              platform,
+              model_id,
+              COUNT(*) as requests,
+              SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) * 100.0 / COUNT(*) as success_rate,
+              AVG(latency_ms) as avg_latency_ms,
+              SUM(input_tokens) as total_input_tokens,
+              SUM(output_tokens) as total_output_tokens
+            FROM requests
+            WHERE created_at >= %s
+            GROUP BY platform, model_id
+            ORDER BY requests DESC
+            """,
+            (since,)
+        )
+        res = []
+        for r in rows:
+            platform = r[0]
+            model_id = r[1]
+            requests = r[2] or 0
+            success_rate = r[3] or 0
+            avg_latency_ms = r[4] or 0
+            total_input_tokens = r[5] or 0
+            total_output_tokens = r[6] or 0
+            
+            display_name = model_id
+            try:
+                from .provider_catalog import get_model_capabilities
+                caps = get_model_capabilities(platform, model_id)
+                if caps and caps.get('display_name'):
+                    display_name = caps.get('display_name')
+            except Exception:
+                pass
+                
+            res.append({
+                'platform': platform,
+                'modelId': model_id,
+                'displayName': display_name,
+                'requests': requests,
+                'successRate': round(success_rate, 1),
+                'avgLatencyMs': round(avg_latency_ms),
+                'totalInputTokens': total_input_tokens,
+                'totalOutputTokens': total_output_tokens,
+            })
+        return res
+    finally:
+        adapter.close()
+
+@app.get('/api/analytics/by-platform', dependencies=[Depends(check_admin_auth)])
+async def get_analytics_by_platform(range: str = '7d'):
+    since = get_since_timestamp(range)
+    svc = get_service()
+    from .db_store import get_adapter
+    adapter = get_adapter(svc.db_url)
+    try:
+        rows = execute_query(
+            adapter,
+            """
+            SELECT
+              platform,
+              COUNT(*) as requests,
+              SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) * 100.0 / COUNT(*) as success_rate,
+              AVG(latency_ms) as avg_latency_ms,
+              SUM(input_tokens) as total_input_tokens,
+              SUM(output_tokens) as total_output_tokens
+            FROM requests
+            WHERE created_at >= %s
+            GROUP BY platform
+            ORDER BY requests DESC
+            """,
+            (since,)
+        )
+        res = []
+        for r in rows:
+            res.append({
+                'platform': r[0],
+                'requests': r[1] or 0,
+                'successRate': round(r[2] or 0, 1),
+                'avgLatencyMs': round(r[3] or 0),
+                'totalInputTokens': r[4] or 0,
+                'totalOutputTokens': r[5] or 0,
+            })
+        return res
+    finally:
+        adapter.close()
+
+@app.get('/api/analytics/timeline', dependencies=[Depends(check_admin_auth)])
+async def get_analytics_timeline(range: str = '7d', interval: str = 'day'):
+    since = get_since_timestamp(range)
+    svc = get_service()
+    from .db_store import get_adapter, SqliteAdapter
+    adapter = get_adapter(svc.db_url)
+    try:
+        if isinstance(adapter, SqliteAdapter):
+            date_format = '%Y-%m-%dT%H:00:00' if interval == 'hour' else '%Y-%m-%d'
+            query = f"""
+                SELECT
+                  strftime('{date_format}', created_at) as timestamp,
+                  COUNT(*) as requests,
+                  SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) as success_count,
+                  SUM(CASE WHEN status = 'error' THEN 1 ELSE 0 END) as failure_count
+                FROM requests
+                WHERE created_at >= %s
+                GROUP BY strftime('{date_format}', created_at)
+                ORDER BY timestamp ASC
+            """
+        else:
+            date_format = 'YYYY-MM-DD"T"HH24:00:00' if interval == 'hour' else 'YYYY-MM-DD'
+            query = f"""
+                SELECT
+                  to_char(created_at, '{date_format}') as timestamp,
+                  COUNT(*) as requests,
+                  SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) as success_count,
+                  SUM(CASE WHEN status = 'error' THEN 1 ELSE 0 END) as failure_count
+                FROM requests
+                WHERE created_at >= %s
+                GROUP BY to_char(created_at, '{date_format}')
+                ORDER BY timestamp ASC
+            """
+        rows = execute_query(adapter, query, (since,))
+        return [{
+            'timestamp': r[0],
+            'requests': r[1] or 0,
+            'successCount': r[2] or 0,
+            'failureCount': r[3] or 0,
+        } for r in rows]
+    finally:
+        adapter.close()
+
+@app.get('/api/analytics/error-distribution', dependencies=[Depends(check_admin_auth)])
+async def get_analytics_error_distribution(range: str = '7d'):
+    since = get_since_timestamp(range)
+    svc = get_service()
+    from .db_store import get_adapter
+    adapter = get_adapter(svc.db_url)
+    try:
+        detailed_rows = execute_query(
+            adapter,
+            """
+            SELECT
+              platform,
+              model_id,
+              CASE
+                WHEN error LIKE '%429%' OR error LIKE '%rate limit%' OR error LIKE '%too many%' OR error LIKE '%quota%' THEN 'Rate Limited (429)'
+                WHEN error LIKE '%401%' OR error LIKE '%unauthorized%' OR error LIKE '%invalid%key%' THEN 'Auth Error (401)'
+                WHEN error LIKE '%403%' OR error LIKE '%forbidden%' THEN 'Forbidden (403)'
+                WHEN error LIKE '%404%' OR error LIKE '%not found%' THEN 'Not Found (404)'
+                WHEN error LIKE '%timeout%' OR error LIKE '%ETIMEDOUT%' OR error LIKE '%ECONNREFUSED%' THEN 'Timeout/Connection'
+                WHEN error LIKE '%500%' OR error LIKE '%internal server%' THEN 'Server Error (500)'
+                WHEN error LIKE '%503%' OR error LIKE '%unavailable%' THEN 'Unavailable (503)'
+                ELSE 'Other'
+              END as error_category,
+              COUNT(*) as count
+            FROM requests
+            WHERE status = 'error' AND created_at >= %s
+            GROUP BY platform, model_id, error_category
+            ORDER BY count DESC
+            """,
+            (since,)
+        )
+        
+        by_category_rows = execute_query(
+            adapter,
+            """
+            SELECT
+              CASE
+                WHEN error LIKE '%429%' OR error LIKE '%rate limit%' OR error LIKE '%too many%' OR error LIKE '%quota%' THEN 'Rate Limited (429)'
+                WHEN error LIKE '%401%' OR error LIKE '%unauthorized%' OR error LIKE '%invalid%key%' THEN 'Auth Error (401)'
+                WHEN error LIKE '%403%' OR error LIKE '%forbidden%' THEN 'Forbidden (403)'
+                WHEN error LIKE '%404%' OR error LIKE '%not found%' THEN 'Not Found (404)'
+                WHEN error LIKE '%timeout%' OR error LIKE '%ETIMEDOUT%' OR error LIKE '%ECONNREFUSED%' THEN 'Timeout/Connection'
+                WHEN error LIKE '%500%' OR error LIKE '%internal server%' THEN 'Server Error (500)'
+                WHEN error LIKE '%503%' OR error LIKE '%unavailable%' THEN 'Unavailable (503)'
+                ELSE 'Other'
+              END as category,
+              COUNT(*) as count
+            FROM requests
+            WHERE status = 'error' AND created_at >= %s
+            GROUP BY category
+            ORDER BY count DESC
+            """,
+            (since,)
+        )
+        
+        by_platform_rows = execute_query(
+            adapter,
+            """
+            SELECT platform, COUNT(*) as count
+            FROM requests
+            WHERE status = 'error' AND created_at >= %s
+            GROUP BY platform
+            ORDER BY count DESC
+            """,
+            (since,)
+        )
+        
+        return {
+            'byCategory': [{'category': r[0], 'count': r[1]} for r in by_category_rows],
+            'byPlatform': [{'platform': r[0], 'count': r[1]} for r in by_platform_rows],
+            'detailed': [{
+                'platform': r[0],
+                'model_id': r[1],
+                'modelId': r[1],
+                'error_category': r[2],
+                'errorCategory': r[2],
+                'count': r[3]
+            } for r in detailed_rows]
+        }
+    finally:
+        adapter.close()
+
+@app.get('/api/analytics/errors', dependencies=[Depends(check_admin_auth)])
+async def get_analytics_errors(range: str = '7d'):
+    since = get_since_timestamp(range)
+    svc = get_service()
+    from .db_store import get_adapter
+    adapter = get_adapter(svc.db_url)
+    try:
+        rows = execute_query(
+            adapter,
+            """
+            SELECT id, platform, model_id, error, latency_ms, created_at
+            FROM requests
+            WHERE status = 'error' AND created_at >= %s
+            ORDER BY created_at DESC
+            LIMIT 50
+            """,
+            (since,)
+        )
+        return [{
+            'id': r[0],
+            'platform': r[1],
+            'modelId': r[2],
+            'model_id': r[2],
+            'error': r[3],
+            'latencyMs': r[4],
+            'createdAt': str(r[5]),
+        } for r in rows]
+    finally:
+        adapter.close()
+
+@app.get('/api/analytics/dashboard', dependencies=[Depends(check_admin_auth)])
+async def get_analytics_dashboard(range: str = '7d'):
+    cached = _analytics_dashboard_cache.get(range)
+    if cached and time.time() - cached[0] < ANALYTICS_DASHBOARD_CACHE_TTL:
+        return cached[1]
+
+    since = get_since_timestamp(range)
+    svc = get_service()
+    from .db_store import get_adapter, SqliteAdapter
+    adapter = get_adapter(svc.db_url)
+    try:
+        summary_row = fetchone_query(
+            adapter,
+            """
+            SELECT
+              COUNT(*) as total_requests,
+              SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) as success_count,
+              SUM(input_tokens) as total_input_tokens,
+              SUM(output_tokens) as total_output_tokens,
+              AVG(latency_ms) as avg_latency_ms
+            FROM requests
+            WHERE created_at >= %s
+            """,
+            (since,)
+        )
+        total_requests = summary_row[0] or 0
+        success_count = summary_row[1] or 0
+        total_input_tokens = summary_row[2] or 0
+        total_output_tokens = summary_row[3] or 0
+        avg_latency_ms = summary_row[4] or 0
+        success_rate = (success_count / total_requests * 100) if total_requests > 0 else 0
+        summary = {
+            'totalRequests': total_requests,
+            'successRate': round(success_rate, 1),
+            'totalInputTokens': total_input_tokens,
+            'totalOutputTokens': total_output_tokens,
+            'avgLatencyMs': round(avg_latency_ms),
+            'estimatedCostSavings': round((total_input_tokens / 1000000) * 3 + (total_output_tokens / 1000000) * 15, 2),
+        }
+
+        platform_rows = execute_query(
+            adapter,
+            """
+            SELECT
+              platform,
+              COUNT(*) as requests,
+              SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) * 100.0 / COUNT(*) as success_rate,
+              AVG(latency_ms) as avg_latency_ms,
+              SUM(input_tokens) as total_input_tokens,
+              SUM(output_tokens) as total_output_tokens
+            FROM requests
+            WHERE created_at >= %s
+            GROUP BY platform
+            ORDER BY requests DESC
+            """,
+            (since,)
+        )
+        by_platform = [{
+            'platform': r[0],
+            'requests': r[1] or 0,
+            'successRate': round(r[2] or 0, 1),
+            'avgLatencyMs': round(r[3] or 0),
+            'totalInputTokens': r[4] or 0,
+            'totalOutputTokens': r[5] or 0,
+        } for r in platform_rows]
+
+        if isinstance(adapter, SqliteAdapter):
+            date_format = '%Y-%m-%d'
+            timeline_query = f"""
+                SELECT
+                  strftime('{date_format}', created_at) as timestamp,
+                  COUNT(*) as requests,
+                  SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) as success_count,
+                  SUM(CASE WHEN status = 'error' THEN 1 ELSE 0 END) as failure_count
+                FROM requests
+                WHERE created_at >= %s
+                GROUP BY strftime('{date_format}', created_at)
+                ORDER BY timestamp ASC
+            """
+        else:
+            date_format = 'YYYY-MM-DD'
+            timeline_query = f"""
+                SELECT
+                  to_char(created_at, '{date_format}') as timestamp,
+                  COUNT(*) as requests,
+                  SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) as success_count,
+                  SUM(CASE WHEN status = 'error' THEN 1 ELSE 0 END) as failure_count
+                FROM requests
+                WHERE created_at >= %s
+                GROUP BY to_char(created_at, '{date_format}')
+                ORDER BY timestamp ASC
+            """
+        timeline_rows = execute_query(adapter, timeline_query, (since,))
+        timeline = [{
+            'timestamp': r[0],
+            'requests': r[1] or 0,
+            'successCount': r[2] or 0,
+            'failureCount': r[3] or 0,
+        } for r in timeline_rows]
+
+        error_by_platform_rows = execute_query(
+            adapter,
+            """
+            SELECT platform, COUNT(*) as count
+            FROM requests
+            WHERE status = 'error' AND created_at >= %s
+            GROUP BY platform
+            ORDER BY count DESC
+            """,
+            (since,)
+        )
+        error_distribution = {
+            'byCategory': [],
+            'byPlatform': [{'platform': r[0], 'count': r[1]} for r in error_by_platform_rows],
+            'detailed': [],
+        }
+
+        error_rows = execute_query(
+            adapter,
+            """
+            SELECT id, platform, model_id, error, latency_ms, created_at
+            FROM requests
+            WHERE status = 'error' AND created_at >= %s
+            ORDER BY created_at DESC
+            LIMIT 50
+            """,
+            (since,)
+        )
+        errors = [{
+            'id': r[0],
+            'platform': r[1],
+            'modelId': r[2],
+            'model_id': r[2],
+            'error': r[3],
+            'latencyMs': r[4],
+            'createdAt': str(r[5]),
+        } for r in error_rows]
+
+        model_rows = execute_query(
+            adapter,
+            """
+            SELECT
+              platform,
+              model_id,
+              COUNT(*) as requests,
+              SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) * 100.0 / COUNT(*) as success_rate,
+              AVG(latency_ms) as avg_latency_ms,
+              SUM(input_tokens) as total_input_tokens,
+              SUM(output_tokens) as total_output_tokens
+            FROM requests
+            WHERE created_at >= %s
+            GROUP BY platform, model_id
+            ORDER BY requests DESC
+            """,
+            (since,)
+        )
+        by_model = []
+        for r in model_rows:
+            platform = r[0]
+            model_id = r[1]
+            display_name = model_id
+            try:
+                from .provider_catalog import get_model_capabilities
+                caps = get_model_capabilities(platform, model_id)
+                if caps and caps.get('display_name'):
+                    display_name = caps.get('display_name')
+            except Exception:
+                pass
+            by_model.append({
+                'platform': platform,
+                'modelId': model_id,
+                'displayName': display_name,
+                'requests': r[2] or 0,
+                'successRate': round(r[3] or 0, 1),
+                'avgLatencyMs': round(r[4] or 0),
+                'totalInputTokens': r[5] or 0,
+                'totalOutputTokens': r[6] or 0,
+            })
+
+        dashboard = {
+            'summary': summary,
+            'byPlatform': by_platform,
+            'timeline': timeline,
+            'errorDistribution': error_distribution,
+            'errors': errors,
+            'byModel': by_model,
+        }
+        _analytics_dashboard_cache[range] = (time.time(), dashboard)
+        return dashboard
+    finally:
+        adapter.close()

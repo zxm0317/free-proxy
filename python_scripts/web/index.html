@@ -516,6 +516,275 @@
             border: 1px solid #bfd2f5;
         }
 
+        .playground-page {
+            max-width: 1120px;
+            margin: 0 auto;
+            height: calc(100vh - 118px);
+            min-height: 540px;
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+            padding: 0;
+        }
+
+        .playground-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+            flex: 0 0 auto;
+        }
+
+        .playground-header h1 {
+            margin: 0 0 4px;
+            font-size: 22px;
+            font-weight: 800;
+            color: var(--text);
+        }
+
+        .playground-header p {
+            margin: 0;
+            color: var(--muted);
+            font-size: 13px;
+            line-height: 1.45;
+        }
+
+        .playground-actions {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            flex: 0 0 auto;
+        }
+
+        .playground-actions .select {
+            width: 300px;
+            min-width: 240px;
+            max-width: 36vw;
+            height: 40px;
+            min-height: 40px;
+            padding-top: 8px;
+            padding-bottom: 8px;
+        }
+
+        .playground-actions .btn {
+            height: 40px;
+            min-width: 64px;
+            padding: 0 14px;
+            white-space: nowrap;
+        }
+
+        .playground-chat {
+            flex: 1;
+            min-height: 0;
+            border: 1px solid var(--line);
+            border-radius: 18px;
+            background: #fff;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            box-shadow: 0 10px 28px rgba(30, 45, 35, 0.06);
+        }
+
+        .playground-messages {
+            flex: 1;
+            min-height: 0;
+            overflow-y: auto;
+            padding: 20px;
+            background: linear-gradient(180deg, #ffffff 0%, #fbfcf8 100%);
+        }
+
+        .playground-empty {
+            height: 100%;
+            min-height: 320px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            color: var(--muted);
+        }
+
+        .playground-empty strong {
+            display: block;
+            color: var(--text);
+            font-size: 16px;
+            margin-bottom: 8px;
+        }
+
+        .playground-row {
+            display: flex;
+            width: 100%;
+            align-items: flex-start;
+            margin-bottom: 12px;
+        }
+
+        .playground-row.user {
+            justify-content: flex-end;
+        }
+
+        .playground-row.assistant {
+            justify-content: flex-start;
+        }
+
+        .playground-bubble {
+            display: inline-block;
+            flex: 0 1 auto;
+            width: auto;
+            min-width: 0;
+            max-width: min(720px, 76%);
+            min-height: 0;
+            height: auto;
+            box-sizing: border-box;
+            border-radius: 15px;
+            padding: 9px 13px;
+            font-size: 14px;
+            line-height: 1.55;
+            word-break: break-word;
+            overflow-wrap: anywhere;
+            box-shadow: 0 1px 2px rgba(30, 45, 35, 0.04);
+        }
+
+        .playground-content {
+            white-space: pre-wrap;
+        }
+
+        .playground-row.user .playground-bubble {
+            max-width: min(560px, 70%);
+            background: var(--primary);
+            color: #fffdfa;
+            border-bottom-right-radius: 5px;
+        }
+
+        .playground-row.assistant .playground-bubble {
+            max-width: min(760px, 78%);
+            background: #eef3ea;
+            color: var(--text);
+            border-bottom-left-radius: 5px;
+        }
+
+        .playground-row.error .playground-bubble {
+            background: var(--error-bg);
+            color: var(--danger);
+            border: 1px solid #efc2c0;
+        }
+
+        .playground-meta {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 8px;
+            font-size: 11px;
+            color: currentColor;
+            font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+            opacity: 0.65;
+        }
+
+        .playground-dots {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            padding: 4px 0;
+        }
+
+        .playground-dots span {
+            width: 6px;
+            height: 6px;
+            border-radius: 999px;
+            background: var(--muted);
+            opacity: 0.55;
+            animation: playgroundPulse 1s ease-in-out infinite;
+        }
+
+        .playground-dots span:nth-child(2) {
+            animation-delay: 0.15s;
+        }
+
+        .playground-dots span:nth-child(3) {
+            animation-delay: 0.3s;
+        }
+
+        @keyframes playgroundPulse {
+            0%, 80%, 100% { transform: translateY(0); opacity: 0.35; }
+            40% { transform: translateY(-3px); opacity: 0.85; }
+        }
+
+        .playground-inputbar {
+            border-top: 1px solid var(--line);
+            background: #fff;
+            padding: 10px;
+            display: flex;
+            align-items: flex-end;
+            gap: 10px;
+        }
+
+        .playground-input {
+            flex: 1;
+            min-height: 40px;
+            max-height: 132px;
+            resize: none;
+            border: 1px solid var(--line);
+            border-radius: 12px;
+            background: #fff;
+            color: var(--text);
+            padding: 9px 12px;
+            font: inherit;
+            font-size: 14px;
+            outline: none;
+            overflow: hidden;
+        }
+
+        .playground-input:focus {
+            border-color: rgba(30, 106, 82, 0.45);
+            box-shadow: 0 0 0 3px rgba(30, 106, 82, 0.08);
+        }
+
+        .playground-inputbar .btn {
+            height: 40px;
+            min-width: 72px;
+            padding: 0 16px;
+            white-space: nowrap;
+            border-radius: 12px;
+        }
+
+        @media (max-width: 760px) {
+            .playground-page {
+                height: calc(100vh - 96px);
+                min-height: 520px;
+            }
+
+            .playground-header {
+                align-items: stretch;
+                flex-direction: column;
+            }
+
+            .playground-actions {
+                flex-direction: column;
+                align-items: stretch;
+            }
+
+            .playground-actions,
+            .playground-actions .select {
+                width: 100%;
+                max-width: none;
+            }
+
+            .playground-chat {
+                border-radius: 18px;
+            }
+
+            .playground-messages {
+                padding: 16px;
+            }
+
+            .playground-bubble {
+                max-width: 86%;
+            }
+
+            .playground-row.user .playground-bubble,
+            .playground-row.assistant .playground-bubble {
+                max-width: 86%;
+            }
+        }
+
         .split {
             display: grid;
             grid-template-columns: 1fr 1fr;
@@ -925,6 +1194,13 @@
         .keys-slider:before { position: absolute; content: ""; height: 14px; width: 14px; left: 3px; bottom: 3px; background-color: white; transition: .2s; border-radius: 50%; }
         input:checked + .keys-slider { background-color: var(--primary); }
         input:checked + .keys-slider:before { transform: translateX(14px); }
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+        .animate-spin {
+            animation: spin 1s linear infinite;
+        }
     </style>
 </head>
 
@@ -1090,9 +1366,15 @@
 
                 <!-- Routing Strategy Card -->
                 <div style="border-radius: 24px; border: 1px solid var(--line); background: #ffffff; padding: 20px; margin-bottom: 24px;">
-                    <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 12px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
                         <h3 style="font-size: 14px; font-weight: 600; margin: 0; color: var(--text);">路由策略</h3>
-                        <span id="strategyWeights" style="font-size: 12px; color: var(--muted); font-family: monospace;"></span>
+                        <div style="display: flex; align-items: center; gap: 12px;">
+                            <button id="speedTestBtn" onclick="runSpeedTest()" style="padding: 6px 16px; border-radius: 9999px; background: linear-gradient(135deg, #3b82f6, #2563eb); color: #fff; border: none; font-size: 12px; font-weight: 500; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; box-shadow: 0 4px 12px rgba(37,99,235,0.2); transition: all 0.2s;">
+                                <svg style="width: 14px; height: 14px;" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+                                一键测速
+                            </button>
+                            <span id="strategyWeights" style="font-size: 12px; color: var(--muted); font-family: monospace;"></span>
+                        </div>
                     </div>
                     <div class="strategy-tabs">
                         <button class="strategy-btn active" id="strat-priority" onclick="setStrategy('priority')">手动</button>
@@ -1124,15 +1406,18 @@
                                     <span style="display: inline-flex; align-items: center; gap: 4px;"><span style="display: inline-block; width: 6px; height: 6px; border-radius: 50%; background-color: #a855f7;"></span>智力</span>
                                 </th>
                                 <th style="padding: 12px 12px; font-weight: 500; width: 80px; text-align: center;">护栏</th>
+                                <th style="padding: 12px 12px; font-weight: 500; width: 90px; text-align: right;">延迟</th>
                                 <th style="padding: 12px 12px; font-weight: 500; width: 80px; text-align: right;">分数</th>
                                 <th style="padding: 12px 12px; font-weight: 500; width: 60px; text-align: right;">在</th>
                             </tr>
                         </thead>
                         <tbody id="modelsStatsBody">
-                            <tr><td colspan="9" style="padding: 12px; text-align: center; color: var(--muted);">正在加载实时排行...</td></tr>
+                            <tr><td colspan="10" style="padding: 12px; text-align: center; color: var(--muted);">正在加载实时排行...</td></tr>
                         </tbody>
                     </table>
                 </div>
+
+                <div id="failedModelsSection" style="margin-top: 12px;"></div>
 
                 <!-- Unconfigured / Hidden footer -->
                 <div id="unconfiguredFooter" style="margin-top: 12px; font-size: 12px; color: var(--muted); line-height: 1.6; padding-left: 4px;">
@@ -1150,73 +1435,158 @@
 
             <!-- TAB: PLAYGROUND -->
             <div id="pane-playground" class="tab-pane">
-                <section class="workbench" aria-label="模型与测试工作区">
-                    <section class="card">
-                        <div class="card-head">
-                            <div>
-                                <h2>2. 模型浏览与推荐</h2>
-                                <div class="subtle">推荐模型优先展示。选中后右侧会直接带入当前验证模型。</div>
-                            </div>
-                            <div class="toolbar">
-                                <input class="field" id="modelSearch" placeholder="搜索 provider / model id">
-                                <button class="btn btn-secondary" id="refreshModelsBtn">刷新当前列表</button>
-                            </div>
+                <section class="playground-page" aria-label="操场">
+                    <div class="playground-header">
+                        <div>
+                            <h1>操场</h1>
+                            <p>通过路由器发送聊天完成消息，看看是由哪个服务提供商提供的。</p>
                         </div>
-                        <div class="tabs" id="providerTabs"></div>
-                        <div class="panel-note" id="modelSummary">先配置至少一个 provider，再加载模型列表。</div>
-                        <div class="model-list" id="modelList" style="margin-top: 12px;"></div>
-                    </section>
+                        <div class="playground-actions">
+                            <select class="select" id="playgroundModelSelect">
+                                <option value="auto">自动（备用链）</option>
+                            </select>
+                            <button class="btn btn-ghost" id="playgroundClearBtn" style="display: none;">清空</button>
+                        </div>
+                    </div>
+                    <div class="playground-chat">
+                        <div class="playground-messages" id="playgroundMessages"></div>
+                        <div class="playground-inputbar">
+                            <textarea id="playgroundInput" class="playground-input" rows="1" placeholder="输入消息...（↵ 发送，⇧↵ 换行）"></textarea>
+                            <button class="btn btn-primary" id="playgroundSendBtn" disabled>发送</button>
+                        </div>
+                    </div>
 
-                    <div class="workbench-side">
-                        <section class="card">
-                            <div class="card-head">
-                                <div>
-                                    <h2>3. 模型验证</h2>
-                                    <div class="subtle">先探测可用性，再发送真实聊天请求。所有结果都会落在同一个工作区。</div>
-                                </div>
-                            </div>
-                            <div class="split" style="margin-bottom: 12px;">
-                                <select class="select" id="chatProvider"></select>
-                                <input class="field mono" id="chatModel" list="modelSuggestions" placeholder="输入或选择模型 ID">
-                            </div>
-                            <datalist id="modelSuggestions"></datalist>
-                            <textarea class="textarea" id="chatPrompt" placeholder="输入测试 Prompt">Reply with exactly OK</textarea>
-                            <div class="toolbar" style="margin-top: 12px;">
-                                <button class="btn btn-secondary" id="probeSelectedBtn">探测模型</button>
-                                <button class="btn btn-primary" id="sendChatBtn">发送测试请求</button>
-                                <button class="btn btn-ghost" id="fillProbePromptBtn">填入最小测试 Prompt</button>
-                            </div>
-                            <div id="diagnosticsBox" class="result-box status-info" style="margin-top: 12px;">还没有执行验证。</div>
-                        </section>
+                    <div style="display: none;">
+                        <input class="field" id="modelSearch">
+                        <button id="refreshModelsBtn"></button>
+                        <div id="providerTabs"></div>
+                        <div id="modelSummary"></div>
+                        <div id="modelList"></div>
+                        <select id="chatProvider"></select>
+                        <input id="chatModel" list="modelSuggestions">
+                        <datalist id="modelSuggestions"></datalist>
+                        <textarea id="chatPrompt">Reply with exactly OK</textarea>
+                        <button id="probeSelectedBtn"></button>
+                        <button id="sendChatBtn"></button>
+                        <button id="fillProbePromptBtn"></button>
+                        <div id="diagnosticsBox"></div>
                     </div>
                 </section>
             </div>
 
             <!-- TAB: ANALYSIS -->
             <div id="pane-analysis" class="tab-pane">
-            <section class="card" id="statsSection">
-                <div class="card-head">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 12px;">
                     <div>
-                        <h2>4. 调用统计 (Model Usage Stats)</h2>
-                        <div class="subtle">按 Provider 和模型维度的调用次数统计。</div>
+                        <h2 style="margin: 0; font-size: 24px; font-weight: 700; color: var(--primary);">数据分析 (Analytics)</h2>
+                        <div class="subtle" style="margin-top: 4px;">请求量、延迟、Token 消耗以及错误率的全面统计分析。</div>
                     </div>
-                    <button class="btn btn-secondary" onclick="fetchUsageStats()">刷新统计</button>
+                    <div style="display: flex; gap: 6px; background: rgba(221, 229, 215, 0.4); padding: 4px; border-radius: 12px; border: 1px solid var(--line);">
+                        <button class="btn btn-secondary btn-sm active-range range-btn" data-range="24h" style="padding: 6px 12px; border-radius: 8px; font-size: 13px; font-weight: 500; cursor: pointer; border: none; background: transparent; color: var(--text);">24h</button>
+                        <button class="btn btn-secondary btn-sm active-range range-btn" data-range="7d" style="padding: 6px 12px; border-radius: 8px; font-size: 13px; font-weight: 500; cursor: pointer; border: none; background: var(--panel-strong); box-shadow: 0 2px 8px rgba(0,0,0,0.05); color: var(--primary);">7d</button>
+                        <button class="btn btn-secondary btn-sm active-range range-btn" data-range="30d" style="padding: 6px 12px; border-radius: 8px; font-size: 13px; font-weight: 500; cursor: pointer; border: none; background: transparent; color: var(--text);">30d</button>
+                    </div>
                 </div>
-                <div class="table-container" style="margin-top: 12px; overflow-x: auto;">
-                    <table style="width: 100%; border-collapse: collapse; text-align: left; background: #fff; border: 1px solid var(--line); border-radius: 8px;">
-                        <thead>
-                            <tr style="border-bottom: 1px solid var(--line); background: #f9f9f9;">
-                                <th style="padding: 12px; font-weight: 600;">Provider</th>
-                                <th style="padding: 12px; font-weight: 600;">模型 (Model)</th>
-                                <th style="padding: 12px; font-weight: 600;">调用次数 (Usage)</th>
-                            </tr>
-                        </thead>
-                        <tbody id="usageStatsBody">
-                            <tr><td colspan="3" style="padding: 12px; text-align: center; color: var(--muted);">正在加载统计数据...</td></tr>
-                        </tbody>
-                    </table>
+
+                <!-- Summary stats grid -->
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 16px; margin-bottom: 24px;">
+                    <div class="card" style="padding: 18px; margin-bottom: 0; display: flex; flex-direction: column; justify-content: space-between; border-radius: 16px;">
+                        <span style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); font-weight: 600;">总请求次数</span>
+                        <span id="stat-total-requests" style="font-size: 24px; font-weight: 700; color: var(--text); margin-top: 8px; font-family: monospace;">0</span>
+                    </div>
+                    <div class="card" style="padding: 18px; margin-bottom: 0; display: flex; flex-direction: column; justify-content: space-between; border-radius: 16px;">
+                        <span style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); font-weight: 600;">请求成功率</span>
+                        <span id="stat-success-rate" style="font-size: 24px; font-weight: 700; color: var(--primary); margin-top: 8px; font-family: monospace;">0%</span>
+                    </div>
+                    <div class="card" style="padding: 18px; margin-bottom: 0; display: flex; flex-direction: column; justify-content: space-between; border-radius: 16px;">
+                        <span style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); font-weight: 600;">输入 Tokens</span>
+                        <span id="stat-input-tokens" style="font-size: 24px; font-weight: 700; color: var(--text); margin-top: 8px; font-family: monospace;">0</span>
+                    </div>
+                    <div class="card" style="padding: 18px; margin-bottom: 0; display: flex; flex-direction: column; justify-content: space-between; border-radius: 16px;">
+                        <span style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); font-weight: 600;">输出 Tokens</span>
+                        <span id="stat-output-tokens" style="font-size: 24px; font-weight: 700; color: var(--text); margin-top: 8px; font-family: monospace;">0</span>
+                    </div>
+                    <div class="card" style="padding: 18px; margin-bottom: 0; display: flex; flex-direction: column; justify-content: space-between; border-radius: 16px;">
+                        <span style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); font-weight: 600;">平均延迟</span>
+                        <span id="stat-avg-latency" style="font-size: 24px; font-weight: 700; color: var(--text); margin-top: 8px; font-family: monospace;">0 ms</span>
+                    </div>
+                    <div class="card" style="padding: 18px; margin-bottom: 0; display: flex; flex-direction: column; justify-content: space-between; border-radius: 16px;">
+                        <span style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); font-weight: 600;">节省费用估计</span>
+                        <span id="stat-estimated-savings" style="font-size: 24px; font-weight: 700; color: var(--accent); margin-top: 8px; font-family: monospace;">$0.00</span>
+                    </div>
                 </div>
-            </section>
+
+                <!-- Charts grid -->
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(450px, 1fr)); gap: 20px; margin-bottom: 24px;">
+                    <div class="card" style="margin-bottom: 0; padding: 20px; border-radius: 16px;">
+                        <h3 style="margin: 0 0 12px 0; font-size: 15px; font-weight: 600; color: var(--text); border-bottom: 1px solid var(--line); padding-bottom: 8px;">Providers 请求量分布</h3>
+                        <div style="position: relative; height: 220px; width: 100%;">
+                            <canvas id="chartProvidersVolume"></canvas>
+                        </div>
+                    </div>
+                    <div class="card" style="margin-bottom: 0; padding: 20px; border-radius: 16px;">
+                        <h3 style="margin: 0 0 12px 0; font-size: 15px; font-weight: 600; color: var(--text); border-bottom: 1px solid var(--line); padding-bottom: 8px;">Providers 平均响应时间 (ms)</h3>
+                        <div style="position: relative; height: 220px; width: 100%;">
+                            <canvas id="chartProvidersLatency"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card" style="margin-bottom: 24px; padding: 20px; border-radius: 16px;">
+                    <h3 style="margin: 0 0 12px 0; font-size: 15px; font-weight: 600; color: var(--text); border-bottom: 1px solid var(--line); padding-bottom: 8px;">请求趋势 (成功 vs 失败)</h3>
+                    <div style="position: relative; height: 240px; width: 100%;">
+                        <canvas id="chartRequestsTimeline"></canvas>
+                    </div>
+                </div>
+
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(450px, 1fr)); gap: 20px; margin-bottom: 24px;">
+                    <div class="card" style="margin-bottom: 0; padding: 20px; border-radius: 16px;">
+                        <h3 style="margin: 0 0 12px 0; font-size: 15px; font-weight: 600; color: var(--text); border-bottom: 1px solid var(--line); padding-bottom: 8px;">错误分布 (按 Provider)</h3>
+                        <div style="position: relative; height: 220px; width: 100%;">
+                            <canvas id="chartErrorsDistribution"></canvas>
+                        </div>
+                    </div>
+                    <div class="card" style="margin-bottom: 0; padding: 20px; border-radius: 16px; display: flex; flex-direction: column;">
+                        <h3 style="margin: 0 0 12px 0; font-size: 15px; font-weight: 600; color: var(--text); border-bottom: 1px solid var(--line); padding-bottom: 8px;">最近错误日志 (LIMIT 50)</h3>
+                        <div style="flex: 1; overflow-y: auto; max-height: 220px;">
+                            <table style="width: 100%; border-collapse: collapse; text-align: left; font-size: 12px;">
+                                <thead>
+                                    <tr style="border-bottom: 1px solid var(--line); background: var(--bg); position: sticky; top: 0;">
+                                        <th style="padding: 8px; font-weight: 600; background: var(--bg);">Provider</th>
+                                        <th style="padding: 8px; font-weight: 600; background: var(--bg);">错误信息</th>
+                                        <th style="padding: 8px; font-weight: 600; text-align: right; background: var(--bg);">时间</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="recentErrorsBody">
+                                    <tr><td colspan="3" style="padding: 12px; text-align: center; color: var(--muted);">暂无错误数据</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Per-model Breakdown Table -->
+                <div class="card" style="padding: 20px; border-radius: 16px; margin-bottom: 0;">
+                    <h3 style="margin: 0 0 12px 0; font-size: 15px; font-weight: 600; color: var(--text); border-bottom: 1px solid var(--line); padding-bottom: 8px;">单模型调用数据分析</h3>
+                    <div class="table-container" style="overflow-x: auto; max-height: 400px;">
+                        <table style="width: 100%; border-collapse: collapse; text-align: left; font-size: 13px;">
+                            <thead>
+                                <tr style="border-bottom: 1px solid var(--line); background: var(--bg); position: sticky; top: 0; z-index: 1;">
+                                    <th style="padding: 10px; font-weight: 600; background: var(--bg);">模型</th>
+                                    <th style="padding: 10px; font-weight: 600; background: var(--bg);">Provider</th>
+                                    <th style="padding: 10px; font-weight: 600; text-align: right; background: var(--bg);">请求次数</th>
+                                    <th style="padding: 10px; font-weight: 600; text-align: right; background: var(--bg);">成功率</th>
+                                    <th style="padding: 10px; font-weight: 600; text-align: right; background: var(--bg);">平均延迟</th>
+                                    <th style="padding: 10px; font-weight: 600; text-align: right; background: var(--bg);">输入 Tokens</th>
+                                    <th style="padding: 10px; font-weight: 600; text-align: right; background: var(--bg);">输出 Tokens</th>
+                                </tr>
+                            </thead>
+                            <tbody id="byModelStatsBody">
+                                <tr><td colspan="7" style="padding: 12px; text-align: center; color: var(--muted);">正在加载统计数据...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
             </div>
 
             
@@ -1260,6 +1630,10 @@
         };
 
         let currentModelsOrder = [];
+        let showFailedModels = false;
+        let showUntestedModels = false;
+        let dragSrcKey = null;
+        const PROBE_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
         const toast = document.getElementById('toast');
         const providerTabs = document.getElementById('providerTabs');
         const modelList = document.getElementById('modelList');
@@ -1270,6 +1644,13 @@
         const chatModel = document.getElementById('chatModel');
         const chatPrompt = document.getElementById('chatPrompt');
         const modelSuggestions = document.getElementById('modelSuggestions');
+        const playgroundModelSelect = document.getElementById('playgroundModelSelect');
+        const playgroundMessages = document.getElementById('playgroundMessages');
+        const playgroundInput = document.getElementById('playgroundInput');
+        const playgroundSendBtn = document.getElementById('playgroundSendBtn');
+        const playgroundClearBtn = document.getElementById('playgroundClearBtn');
+        let playgroundChatMessages = [];
+        let playgroundLoading = false;
 
         function showToast(message, type = 'success') {
             toast.textContent = message;
@@ -1317,6 +1698,9 @@
         }
 
         async function startApp() {
+            renderPlaygroundModels();
+            renderPlaygroundMessages();
+            resizePlaygroundInput();
             const isValid = await checkInitialAuth();
             if (!isValid) {
                 window.location.href = '/login';
@@ -1465,6 +1849,162 @@
                 }
             }
             return finalText;
+        }
+
+        function playgroundAvailableModels() {
+            return currentModelsOrder
+                .filter((item) => item && item.enabled !== false && item.probe_status === 'success')
+                .map((item) => ({
+                    value: `${item.provider}/${item.model}`,
+                    label: item.model,
+                    provider: item.provider,
+                    latency: item.latency_ms,
+                }));
+        }
+
+        function renderPlaygroundModels() {
+            if (!playgroundModelSelect) return;
+            const current = playgroundModelSelect.value || 'auto';
+            const models = playgroundAvailableModels();
+            playgroundModelSelect.innerHTML = [
+                '<option value="auto">自动（备用链）</option>',
+                ...models.map((item) => {
+                    const latency = Number.isFinite(item.latency) ? ` · ${Math.round(item.latency)} ms` : '';
+                    return `<option value="${escapeHtml(item.value)}">${escapeHtml(item.label)} · ${escapeHtml(item.provider)}${latency}</option>`;
+                })
+            ].join('');
+            playgroundModelSelect.value = current === 'auto' || models.some((item) => item.value === current) ? current : 'auto';
+            renderPlaygroundMessages();
+        }
+
+        function playgroundActiveModelLabel() {
+            if (!playgroundModelSelect || playgroundModelSelect.value === 'auto') {
+                return '自动（备用链）';
+            }
+            const selected = playgroundAvailableModels().find((item) => item.value === playgroundModelSelect.value);
+            return selected ? `${selected.label} (${selected.provider})` : playgroundModelSelect.value;
+        }
+
+        function renderPlaygroundMessages() {
+            if (!playgroundMessages || !playgroundClearBtn) return;
+            playgroundClearBtn.style.display = playgroundChatMessages.length ? '' : 'none';
+            if (!playgroundChatMessages.length) {
+                playgroundMessages.innerHTML = `
+                    <div class="playground-empty">
+                        <div>
+                            <strong>发送消息即可开始。</strong>
+                            <div>使用 ${escapeHtml(playgroundActiveModelLabel())}。在上方选择器中切换模型。</div>
+                        </div>
+                    </div>
+                `;
+                return;
+            }
+
+            playgroundMessages.innerHTML = playgroundChatMessages.map((msg) => {
+                const meta = msg.meta ? [
+                    msg.meta.platform,
+                    msg.meta.model,
+                    Number.isFinite(msg.meta.latency) ? `${msg.meta.latency} ms` : '',
+                    Number.isFinite(msg.meta.fallbackAttempts) && msg.meta.fallbackAttempts > 0 ? `${msg.meta.fallbackAttempts} 次回退` : '',
+                ].filter(Boolean).join(' · ') : '';
+                const rowClass = `${msg.role}${msg.error ? ' error' : ''}`;
+                return `
+                    <div class="playground-row ${rowClass}">
+                        <div class="playground-bubble">
+                            <div class="playground-content">${escapeHtml(msg.content)}</div>
+                            ${meta ? `<div class="playground-meta">${escapeHtml(meta)}</div>` : ''}
+                        </div>
+                    </div>
+                `;
+            }).join('') + (playgroundLoading ? `
+                <div class="playground-row assistant">
+                    <div class="playground-bubble">
+                        <div class="playground-dots"><span></span><span></span><span></span></div>
+                    </div>
+                </div>
+            ` : '');
+            playgroundMessages.scrollTop = playgroundMessages.scrollHeight;
+        }
+
+        function resizePlaygroundInput() {
+            if (!playgroundInput) return;
+            playgroundInput.style.height = 'auto';
+            playgroundInput.style.height = Math.min(playgroundInput.scrollHeight, 132) + 'px';
+            if (playgroundSendBtn) {
+                playgroundSendBtn.disabled = playgroundLoading || !playgroundInput.value.trim();
+            }
+        }
+
+        async function sendPlaygroundMessage() {
+            if (!playgroundInput || !playgroundSendBtn || playgroundLoading) return;
+            const text = playgroundInput.value.trim();
+            if (!text) return;
+
+            const proxyKey = document.getElementById('proxyKeyDisplay')?.dataset?.key || '';
+            const userMessage = { role: 'user', content: text };
+            const nextMessages = [...playgroundChatMessages, userMessage];
+            playgroundChatMessages = nextMessages;
+            playgroundInput.value = '';
+            resizePlaygroundInput();
+            playgroundLoading = true;
+            playgroundSendBtn.textContent = '发送中...';
+            renderPlaygroundMessages();
+
+            try {
+                if (!proxyKey) {
+                    throw new Error('请先在“钥匙”页生成统一 API 密钥。');
+                }
+
+                const selected = playgroundModelSelect?.value || 'auto';
+                const body = {
+                    model: selected === 'auto' ? 'free-proxy/auto' : selected,
+                    messages: nextMessages.map((msg) => ({ role: msg.role, content: msg.content })),
+                };
+
+                const startedAt = Date.now();
+                const response = await fetch('/v1/chat/completions', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${proxyKey}`,
+                    },
+                    body: JSON.stringify(body),
+                });
+                const latency = Date.now() - startedAt;
+                const routedVia = response.headers.get('X-Routed-Via') || '';
+                const fallbackAttempts = response.headers.get('X-Fallback-Attempts');
+
+                if (!response.ok) {
+                    const err = await response.json().catch(() => ({ error: { message: `HTTP ${response.status}` } }));
+                    throw new Error(err.error?.message || err.error || `HTTP ${response.status}`);
+                }
+
+                const data = await response.json();
+                const content = extractChatTextFromJsonPayload(data) || JSON.stringify(data, null, 2);
+                const viaParts = routedVia ? routedVia.split('/') : [];
+                playgroundChatMessages = [...nextMessages, {
+                    role: 'assistant',
+                    content,
+                    meta: {
+                        platform: viaParts[0] || '',
+                        model: viaParts.slice(1).join('/'),
+                        latency,
+                        fallbackAttempts: fallbackAttempts ? Number(fallbackAttempts) : undefined,
+                    },
+                }];
+            } catch (error) {
+                playgroundChatMessages = [...nextMessages, {
+                    role: 'assistant',
+                    content: `Error: ${error.message || '未知错误'}`,
+                    error: true,
+                }];
+            } finally {
+                playgroundLoading = false;
+                playgroundSendBtn.textContent = '发送';
+                resizePlaygroundInput();
+                renderPlaygroundMessages();
+                playgroundInput.focus();
+            }
         }
 
         function setDiagnostics(kind, lines) {
@@ -2329,17 +2869,52 @@
             chatPrompt.value = 'Reply with exactly OK';
         });
 
+        playgroundModelSelect?.addEventListener('change', () => {
+            renderPlaygroundMessages();
+            playgroundInput?.focus();
+        });
 
+        playgroundInput?.addEventListener('input', () => {
+            resizePlaygroundInput();
+        });
+
+        playgroundInput?.addEventListener('keydown', async (event) => {
+            if (event.key === 'Enter' && !event.shiftKey) {
+                event.preventDefault();
+                await sendPlaygroundMessage();
+            }
+        });
+
+        playgroundSendBtn?.addEventListener('click', async () => {
+            await sendPlaygroundMessage();
+        });
+
+        playgroundClearBtn?.addEventListener('click', () => {
+            playgroundChatMessages = [];
+            renderPlaygroundMessages();
+            playgroundInput?.focus();
+        });
 
         async function bootstrap(forceModels = false) {
-            await loadProxyKey();
-            await loadStatuses();
-            await loadPreferredModel();
+            renderPlaygroundModels();
+            renderPlaygroundMessages();
+            await Promise.all([
+                loadProxyKey(),
+                loadPreferredModel(),
+            ]);
             await ensureVisibleModels(forceModels);
+            renderPlaygroundModels();
+            renderPlaygroundMessages();
             
-            // Fire and forget stats loading to avoid blocking the main UI
-            fetchUsageStats();
-            fetchModelsStats();
+            const activePaneId = document.querySelector('.tab-pane.active')?.id;
+            if (activePaneId === 'pane-models') {
+                setTimeout(() => fetchModelsStats(), 0);
+            } else if (activePaneId === 'pane-analysis') {
+                setTimeout(() => fetchDetailedAnalytics(), 0);
+            }
+            setTimeout(() => {
+                fetchCachedAnalytics('dashboard').catch((err) => console.debug('analytics warmup skipped', err));
+            }, 1500);
             
             setDiagnostics('status-info', [
                 '动作: 页面初始化',
@@ -2433,6 +3008,159 @@
             renderModelsStatsTable();
         };
 
+        window.runSpeedTest = async function() {
+            const btn = document.getElementById('speedTestBtn');
+            if (!btn || btn.disabled) return;
+            const batchSize = 12;
+            const concurrencyLimit = 4;
+            const batchDelayMs = 800;
+            const requestTimeoutMs = 10000;
+            const sleep = (ms) => new Promise((resolve) => window.setTimeout(resolve, ms));
+            const resetButton = () => {
+                btn.disabled = false;
+                btn.innerHTML = `
+                    <svg style="width: 14px; height: 14px;" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+                    一键测速
+                `;
+            };
+            const setProgress = (done, total, batchIndex, batchCount, successCount, failedCount, skipped) => {
+                btn.innerHTML = `
+                    <svg class="animate-spin" style="width: 14px; height: 14px; animation: spin 1s linear infinite;" fill="none" viewBox="0 0 24 24">
+                        <circle style="opacity: 0.25;" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path style="opacity: 0.75;" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    测速 ${done}/${total} · 第 ${batchIndex}/${batchCount} 批 · 成功 ${successCount} 失败 ${failedCount} 跳过 ${skipped}
+                `;
+            };
+
+            btn.disabled = true;
+            btn.innerHTML = `
+                <svg class="animate-spin" style="width: 14px; height: 14px; animation: spin 1s linear infinite;" fill="none" viewBox="0 0 24 24">
+                    <circle style="opacity: 0.25;" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path style="opacity: 0.75;" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                测速中...
+            `;
+
+            const testableModels = currentModelsOrder.filter((item) => !isProbeCacheFresh(item));
+            const skipped = currentModelsOrder.filter((item) => isProbeCacheFresh(item)).length;
+            if (testableModels.length === 0) {
+                showToast(skipped ? '最近已测速，无需重复测试' : '无可用模型进行测速', skipped ? 'success' : 'warning');
+                resetButton();
+                return;
+            }
+            showToast(`开始测速 ${testableModels.length} 个模型，跳过 ${skipped} 个已缓存结果`, 'info');
+
+            const results = [];
+            const batches = [];
+            for (let i = 0; i < testableModels.length; i += batchSize) {
+                batches.push(testableModels.slice(i, i + batchSize));
+            }
+            let completed = 0;
+            let successCount = 0;
+            let failedCount = 0;
+            setProgress(0, testableModels.length, 1, batches.length, 0, 0, skipped);
+
+            async function testOne(item) {
+                const modelKey = `${item.provider}/${item.model}`;
+                const controller = new AbortController();
+                const timer = window.setTimeout(() => controller.abort(), requestTimeoutMs);
+                try {
+                    const res = await fetch('/api/models/test', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ model_key: modelKey }),
+                        signal: controller.signal
+                    });
+                    const data = await res.json();
+                    item.probe_status = data.ok ? 'success' : 'failed';
+                    item.latency_ms = Number.isFinite(data.latency_ms) ? data.latency_ms : null;
+                    item.probe_checked_at = Math.floor(Date.now() / 1000);
+                    item.probe_error = data.error || '';
+                    const result = { item, success: Boolean(data.ok), latency: item.latency_ms || 999999 };
+                    results.push(result);
+                    return result;
+                } catch (err) {
+                    item.probe_status = 'failed';
+                    item.latency_ms = null;
+                    item.probe_checked_at = Math.floor(Date.now() / 1000);
+                    item.probe_error = err.name === 'AbortError' ? '测速超时，已跳过' : (err.message || '测速失败');
+                    const result = { item, success: false, latency: 999999 };
+                    results.push(result);
+                    return result;
+                } finally {
+                    window.clearTimeout(timer);
+                }
+            }
+
+            async function runBatch(batch, batchIndex) {
+                let batchCursor = 0;
+                async function batchWorker() {
+                    while (batchCursor < batch.length) {
+                        const item = batch[batchCursor++];
+                        const res = await testOne(item);
+                        completed += 1;
+                        if (res.success) successCount += 1;
+                        else failedCount += 1;
+                        setProgress(completed, testableModels.length, batchIndex, batches.length, successCount, failedCount, skipped);
+                        renderModelsStatsTable();
+                    }
+                }
+                const workers = Array.from({ length: Math.min(concurrencyLimit, batch.length) }, batchWorker);
+                await Promise.all(workers);
+            }
+
+            try {
+                for (let i = 0; i < batches.length; i += 1) {
+                    setProgress(completed, testableModels.length, i + 1, batches.length, successCount, failedCount, skipped);
+                    await runBatch(batches[i], i + 1);
+                    if (i < batches.length - 1) {
+                        await sleep(batchDelayMs);
+                    }
+                }
+            } catch (err) {
+                console.error(err);
+                showToast('测速中断，请稍后重试', 'error');
+            }
+
+            const ordered = [...currentModelsOrder].sort((a, b) => {
+                const rank = (item) => item.probe_status === 'success' ? 0 : item.probe_status === 'untested' ? 1 : 2;
+                const rankDiff = rank(a) - rank(b);
+                if (rankDiff !== 0) return rankDiff;
+                const leftLatency = Number.isFinite(a.latency_ms) ? a.latency_ms : 999999;
+                const rightLatency = Number.isFinite(b.latency_ms) ? b.latency_ms : 999999;
+                return leftLatency - rightLatency;
+            });
+
+            try {
+                const orderStrings = ordered.map(i => `${i.provider}/${i.model}`);
+                await fetch('/api/manual-order', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ order: orderStrings })
+                });
+                showToast(`测速完成：成功 ${successCount}，未通过 ${failedCount}，跳过 ${skipped}`);
+            } catch (err) {
+                console.error(err);
+                showToast('排序保存失败', 'error');
+            }
+
+            currentStrategy = 'priority';
+            document.querySelectorAll('.strategy-btn').forEach(tab => {
+                if (tab.id === 'strat-priority') tab.classList.add('active');
+                else if (tab.id.startsWith('strat-')) tab.classList.remove('active');
+            });
+            const blurbP = document.getElementById('strategyBlurb');
+            if (blurbP) {
+                blurbP.textContent = '手动模式：请求按以下顺序排列，从上到下。拖动即可重新排序。';
+            }
+
+            localModelsOrder = null;
+            document.getElementById('floatingSaveBar').style.display = 'none';
+            await fetchModelsStats();
+            resetButton();
+        };
+
         window.toggleModelEnabled = async function(modelId, checked) {
             try {
                 const res = await fetch(`/api/models/toggle`, {
@@ -2485,15 +3213,14 @@
             }
         };
 
-        let dragSrcIndex = null;
-        window.rowDragStart = function(event, index) {
+        window.rowDragStart = function(event, modelKey) {
             if (currentStrategy !== 'priority') {
                 event.preventDefault();
                 return;
             }
-            dragSrcIndex = index;
+            dragSrcKey = modelKey;
             event.dataTransfer.effectAllowed = 'move';
-            event.dataTransfer.setData('text/plain', index);
+            event.dataTransfer.setData('text/plain', modelKey);
             event.currentTarget.style.opacity = '0.4';
         };
 
@@ -2503,25 +3230,30 @@
             event.dataTransfer.dropEffect = 'move';
         };
 
-        window.rowDrop = function(event, targetIndex) {
+        window.rowDrop = function(event, targetKey) {
             if (currentStrategy !== 'priority') return;
             event.preventDefault();
             event.currentTarget.style.opacity = '1.0';
-            if (dragSrcIndex === null || dragSrcIndex === targetIndex) return;
+            if (!dragSrcKey || dragSrcKey === targetKey) return;
             
-            let displayList = localModelsOrder ? [...localModelsOrder] : [...currentModelsOrder];
-            const dragItem = displayList[dragSrcIndex];
-            displayList.splice(dragSrcIndex, 1);
-            displayList.splice(targetIndex, 0, dragItem);
+            const baseList = localModelsOrder ? [...localModelsOrder] : [...currentModelsOrder];
+            const visibleList = baseList.filter((item) => item.probe_status === 'success');
+            const hiddenList = baseList.filter((item) => item.probe_status !== 'success');
+            const sourceIndex = visibleList.findIndex((item) => encodeURIComponent(`${item.provider}/${item.model}`) === dragSrcKey);
+            const targetIndex = visibleList.findIndex((item) => encodeURIComponent(`${item.provider}/${item.model}`) === targetKey);
+            if (sourceIndex < 0 || targetIndex < 0) return;
+            const dragItem = visibleList[sourceIndex];
+            visibleList.splice(sourceIndex, 1);
+            visibleList.splice(targetIndex, 0, dragItem);
             
-            localModelsOrder = displayList;
+            localModelsOrder = [...visibleList, ...hiddenList];
             document.getElementById('floatingSaveBar').style.display = 'flex';
             renderModelsStatsTable();
         };
         
         window.rowDragEnd = function(event) {
             event.currentTarget.style.opacity = '1.0';
-            dragSrcIndex = null;
+            dragSrcKey = null;
         };
 
         async function fetchUsageStats() {
@@ -2556,6 +3288,7 @@
                 if (!data || !data.models) return;
                 currentModelsOrder = data.models;
                 renderModelsStatsTable();
+                renderPlaygroundModels();
             } catch (err) {
                 console.error('fetchModelsStats error:', err);
             }
@@ -2591,6 +3324,13 @@
             return String(n);
         }
 
+        function isBudgetAvailableModel(item) {
+            return item
+                && item.enabled !== false
+                && item.probe_status === 'success'
+                && Number.isFinite(item.latency_ms);
+        }
+
         function renderBudgetCard() {
             const card = document.getElementById('budgetCard');
             const text = document.getElementById('budgetText');
@@ -2598,7 +3338,7 @@
             const legend = document.getElementById('budgetLegend');
             if (!card || !progress || !legend) return;
 
-            const enabledModels = currentModelsOrder.filter(item => item.enabled);
+            const enabledModels = currentModelsOrder.filter(isBudgetAvailableModel);
             if (enabledModels.length === 0) {
                 card.style.display = 'none';
                 return;
@@ -2662,6 +3402,95 @@
 
         // loadStatuses is now defined in-place with unconfigured footer logic.
 
+        function isProbeCacheFresh(item) {
+            if (!item || !item.probe_checked_at || item.probe_status === 'untested') return false;
+            return Date.now() - Number(item.probe_checked_at) * 1000 < PROBE_CACHE_TTL_MS;
+        }
+
+        function formatProbeLatency(item) {
+            if (item.probe_status === 'failed') return '未通过';
+            if (Number.isFinite(item.latency_ms)) return `${Math.round(item.latency_ms)} ms`;
+            return '未测';
+        }
+
+        function probeRank(item) {
+            if (item.probe_status === 'success') return 0;
+            if (item.probe_status === 'untested') return 1;
+            return 2;
+        }
+
+        window.toggleFailedModels = function() {
+            showFailedModels = !showFailedModels;
+            renderModelsStatsTable();
+        };
+
+        window.toggleUntestedModels = function() {
+            showUntestedModels = !showUntestedModels;
+            renderModelsStatsTable();
+        };
+
+        function renderHiddenModelTable(items, { title, expanded, toggleFn, emptyText, reasonFallback }) {
+            if (!items.length) return '';
+            const rows = items.map((item) => `
+                <tr style="border-bottom: 1px solid var(--line);">
+                    <td style="padding: 10px 12px; font-weight: 600;">${escapeHtml(item.model)}</td>
+                    <td style="padding: 10px 12px; color: var(--muted);">${escapeHtml(item.provider)}</td>
+                    <td style="padding: 10px 12px; text-align: right; font-family: monospace;">${Number.isFinite(item.latency_ms) ? `${Math.round(item.latency_ms)} ms` : '—'}</td>
+                    <td style="padding: 10px 12px; color: var(--muted);">${escapeHtml(item.probe_error || reasonFallback)}</td>
+                </tr>
+            `).join('');
+            return `
+                <div style="border: 1px solid var(--line); border-radius: 16px; background: #fff; overflow: hidden;">
+                    <button onclick="${toggleFn}()" style="width: 100%; display: flex; justify-content: space-between; align-items: center; padding: 10px 14px; border: none; background: #fafafa; color: var(--text); cursor: pointer; font-size: 12px; font-weight: 600;">
+                        <span>${title} ${items.length} 个</span>
+                        <span style="color: var(--muted);">${expanded ? '收起' : '展开'}</span>
+                    </button>
+                    ${expanded ? `
+                        <div style="overflow-x: auto;">
+                            <table style="width: 100%; border-collapse: collapse; font-size: 12px;">
+                                <thead>
+                                    <tr style="border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); color: var(--muted);">
+                                        <th style="padding: 8px 12px; text-align: left;">模型</th>
+                                        <th style="padding: 8px 12px; text-align: left;">Provider</th>
+                                        <th style="padding: 8px 12px; text-align: right;">延迟</th>
+                                        <th style="padding: 8px 12px; text-align: left;">状态</th>
+                                    </tr>
+                                </thead>
+                                <tbody>${rows || `<tr><td colspan="4" style="padding: 12px; color: var(--muted);">${emptyText}</td></tr>`}</tbody>
+                            </table>
+                        </div>
+                    ` : ''}
+                </div>
+            `;
+        }
+
+        function renderHiddenModelsSection(failedModels, untestedModels) {
+            const section = document.getElementById('failedModelsSection');
+            if (!section) return;
+            if (!failedModels.length && !untestedModels.length) {
+                section.innerHTML = '';
+                return;
+            }
+            section.innerHTML = `
+                <div style="display: flex; flex-direction: column; gap: 10px;">
+                    ${renderHiddenModelTable(untestedModels, {
+                        title: '未测速模型',
+                        expanded: showUntestedModels,
+                        toggleFn: 'toggleUntestedModels',
+                        emptyText: '暂无未测速模型',
+                        reasonFallback: '等待一键测速'
+                    })}
+                    ${renderHiddenModelTable(failedModels, {
+                        title: '不可用 / 未通过模型',
+                        expanded: showFailedModels,
+                        toggleFn: 'toggleFailedModels',
+                        emptyText: '暂无未通过模型',
+                        reasonFallback: '探测失败'
+                    })}
+                </div>
+            `;
+        }
+
         function renderModelsStatsTable() {
             const tbody = document.getElementById('modelsStatsBody');
             if (!tbody) return;
@@ -2670,21 +3499,41 @@
             
             const activeList = localModelsOrder || currentModelsOrder;
             if (activeList.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="9" style="padding: 12px; text-align: center; color: var(--muted);">暂无模型排行数据</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="10" style="padding: 12px; text-align: center; color: var(--muted);">暂无模型排行数据</td></tr>';
+                renderHiddenModelsSection([], []);
                 return;
             }
             
-            let displayList = [...activeList];
+            const failedModels = activeList.filter((item) => item.probe_status === 'failed');
+            const untestedModels = activeList.filter((item) => item.probe_status !== 'success' && item.probe_status !== 'failed');
+            renderHiddenModelsSection(failedModels, untestedModels);
+
+            let displayList = activeList.filter((item) => item.probe_status === 'success');
+            if (displayList.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="10" style="padding: 12px; text-align: center; color: var(--muted);">暂无通过测速的模型。点击“一键测速”，或展开下方未测速/未通过模型查看详情。</td></tr>';
+                return;
+            }
+
             if (currentStrategy !== 'priority') {
                 displayList.sort((a, b) => {
                     const scoreA = calculateScore(a, currentStrategy);
                     const scoreB = calculateScore(b, currentStrategy);
                     return scoreB - scoreA;
                 });
+            } else if (!localModelsOrder) {
+                displayList.sort((a, b) => {
+                    const rankDiff = probeRank(a) - probeRank(b);
+                    if (rankDiff !== 0) return rankDiff;
+                    const leftLatency = Number.isFinite(a.latency_ms) ? a.latency_ms : 999999;
+                    const rightLatency = Number.isFinite(b.latency_ms) ? b.latency_ms : 999999;
+                    return leftLatency - rightLatency;
+                });
             }
             
             tbody.innerHTML = displayList.map((item, index) => {
                 const score = currentStrategy === 'priority' ? (item.score || 0) : calculateScore(item, currentStrategy);
+                const modelKey = `${item.provider}/${item.model}`;
+                const modelKeyToken = encodeURIComponent(modelKey);
                 
                 const modelLower = item.model.toLowerCase();
                 const supportsVision = modelLower.includes('vision') || modelLower.includes('gpt-4o') || modelLower.includes('gemini') || modelLower.includes('claude-3');
@@ -2706,9 +3555,9 @@
                 return `
                     <tr style="border-bottom: 1px solid var(--line); opacity: ${rowOpacity}; transition: opacity 0.2s;" 
                         draggable="${isManual}"
-                        ondragstart="rowDragStart(event, ${index})"
+                        ondragstart="rowDragStart(event, '${modelKeyToken}')"
                         ondragover="rowDragOver(event)"
-                        ondrop="rowDrop(event, ${index})"
+                        ondrop="rowDrop(event, '${modelKeyToken}')"
                         ondragend="rowDragEnd(event)">
                         
                         <!-- Drag Handle -->
@@ -2769,6 +3618,11 @@
                         <td style="padding: 12px; vertical-align: middle; text-align: center; font-family: monospace; font-size: 11px; color: var(--muted);">
                             ${item.headroom < 0.99 ? `×${item.headroom.toFixed(2)}` : '—'}
                         </td>
+
+                        <!-- Latency -->
+                        <td style="padding: 12px; vertical-align: middle; text-align: right; font-family: monospace; font-weight: 600; color: ${item.probe_status === 'success' ? 'var(--text)' : 'var(--muted)'};">
+                            ${formatProbeLatency(item)}
+                        </td>
                         
                         <!-- Score -->
                         <td style="padding: 12px; vertical-align: middle; text-align: right; font-family: monospace; font-weight: 600;">
@@ -2793,6 +3647,254 @@
                 error.message || '未知错误',
             ]);
             showToast('初始化失败', 'error');
+        });
+
+        let activeRange = '7d';
+        let chartsInstance = {};
+        let chartJsPromise = null;
+        const analyticsCache = {};
+        const ANALYTICS_CACHE_TTL_MS = 30000;
+
+        function loadChartJs() {
+            if (window.Chart) {
+                return Promise.resolve();
+            }
+            if (chartJsPromise) {
+                return chartJsPromise;
+            }
+            chartJsPromise = new Promise((resolve, reject) => {
+                const script = document.createElement('script');
+                script.src = 'https://cdn.jsdelivr.net/npm/chart.js';
+                script.async = true;
+                script.onload = () => resolve();
+                script.onerror = () => reject(new Error('Chart.js 加载失败'));
+                document.head.appendChild(script);
+            });
+            return chartJsPromise;
+        }
+
+        async function fetchCachedAnalytics(name) {
+            const key = `${activeRange}:${name}`;
+            const cached = analyticsCache[key];
+            if (cached && Date.now() - cached.ts < ANALYTICS_CACHE_TTL_MS) {
+                return cached.data;
+            }
+            const response = await fetch(`/api/analytics/${name}?range=${activeRange}`);
+            if (response.status === 401) {
+                showToast('请登录管理员账户', 'error');
+                window.location.href = '/login';
+                throw new Error('unauthorized');
+            }
+            if (!response.ok) {
+                throw new Error(`${name} HTTP ${response.status}`);
+            }
+            const data = await response.json();
+            analyticsCache[key] = { ts: Date.now(), data };
+            return data;
+        }
+
+        async function fetchDetailedAnalytics() {
+            // Update active state in UI
+            document.querySelectorAll('.range-btn').forEach(btn => {
+                if (btn.getAttribute('data-range') === activeRange) {
+                    btn.style.background = 'var(--panel-strong)';
+                    btn.style.boxShadow = '0 2px 8px rgba(0,0,0,0.05)';
+                    btn.style.color = 'var(--primary)';
+                } else {
+                    btn.style.background = 'transparent';
+                    btn.style.boxShadow = 'none';
+                    btn.style.color = 'var(--text)';
+                }
+            });
+
+            let dashboard;
+            try {
+                dashboard = await fetchCachedAnalytics('dashboard');
+            } catch (err) {
+                console.error('fetchDetailedAnalytics dashboard error:', err);
+                return;
+            }
+
+            const summaryRes = { status: 'fulfilled', value: dashboard.summary || {} };
+            const platformRes = { status: 'fulfilled', value: dashboard.byPlatform || [] };
+            const timelineRes = { status: 'fulfilled', value: dashboard.timeline || [] };
+            const errorDistRes = { status: 'fulfilled', value: dashboard.errorDistribution || { byPlatform: [] } };
+            const errorsRes = { status: 'fulfilled', value: dashboard.errors || [] };
+            const modelRes = { status: 'fulfilled', value: dashboard.byModel || [] };
+
+            if (summaryRes.status === 'fulfilled') {
+                const summary = summaryRes.value;
+                document.getElementById('stat-total-requests').textContent = summary.totalRequests.toLocaleString();
+                document.getElementById('stat-success-rate').textContent = summary.successRate + '%';
+                document.getElementById('stat-input-tokens').textContent = summary.totalInputTokens.toLocaleString();
+                document.getElementById('stat-output-tokens').textContent = summary.totalOutputTokens.toLocaleString();
+                document.getElementById('stat-avg-latency').textContent = summary.avgLatencyMs + ' ms';
+                document.getElementById('stat-estimated-savings').textContent = '$' + summary.estimatedCostSavings.toFixed(2);
+            } else {
+                console.error('fetchDetailedAnalytics summary error:', summaryRes.reason);
+            }
+
+            if (errorsRes.status === 'fulfilled') {
+                const data = errorsRes.value;
+                const tbody = document.getElementById('recentErrorsBody');
+                if (data.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="3" style="padding: 12px; text-align: center; color: var(--muted);">暂无错误日志</td></tr>';
+                } else {
+                    tbody.innerHTML = data.map((err) => `
+                        <tr style="border-bottom: 1px solid var(--line); font-size: 11px;">
+                            <td style="padding: 8px; font-weight: 600; color: var(--danger); vertical-align: top;">${escapeHtml(err.platform)}</td>
+                            <td style="padding: 8px; color: var(--text); word-break: break-all; max-width: 250px;">
+                                <strong>${escapeHtml(err.modelId)}</strong><br>
+                                <span style="color: var(--muted);">${escapeHtml(err.error || 'Unknown Error')}</span>
+                            </td>
+                            <td style="padding: 8px; text-align: right; color: var(--muted); vertical-align: top; white-space: nowrap;">${escapeHtml(err.createdAt.replace('T', ' ').substring(5, 16))}</td>
+                        </tr>
+                    `).join('');
+                }
+            } else {
+                console.error('fetchDetailedAnalytics errors error:', errorsRes.reason);
+            }
+
+            if (modelRes.status === 'fulfilled') {
+                const data = modelRes.value;
+                const tbody = document.getElementById('byModelStatsBody');
+                if (data.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="7" style="padding: 12px; text-align: center; color: var(--muted);">暂无模型数据</td></tr>';
+                } else {
+                    tbody.innerHTML = data.map((row) => `
+                        <tr style="border-bottom: 1px solid var(--line);">
+                            <td style="padding: 10px; font-weight: 600; color: var(--text);">${escapeHtml(row.displayName)}</td>
+                            <td style="padding: 10px; color: var(--muted);">${escapeHtml(row.platform)}</td>
+                            <td style="padding: 10px; text-align: right; font-family: monospace;">${escapeHtml(row.requests.toLocaleString())}</td>
+                            <td style="padding: 10px; text-align: right; font-family: monospace; font-weight: 600; color: ${row.successRate > 90 ? 'var(--primary)' : 'var(--danger)'};">${escapeHtml(row.successRate)}%</td>
+                            <td style="padding: 10px; text-align: right; font-family: monospace;">${escapeHtml(row.avgLatencyMs.toLocaleString())} ms</td>
+                            <td style="padding: 10px; text-align: right; font-family: monospace; color: var(--muted);">${escapeHtml(row.totalInputTokens.toLocaleString())}</td>
+                            <td style="padding: 10px; text-align: right; font-family: monospace; color: var(--muted);">${escapeHtml(row.totalOutputTokens.toLocaleString())}</td>
+                        </tr>
+                    `).join('');
+                }
+            } else {
+                console.error('fetchDetailedAnalytics by-model error:', modelRes.reason);
+            }
+
+            try {
+                await loadChartJs();
+                if (platformRes.status === 'fulfilled') {
+                    const data = platformRes.value;
+                    const labels = data.map(item => item.platform);
+                    renderBarChart('chartProvidersVolume', labels, data.map(item => item.requests), '请求量', '#7aa382');
+                    renderBarChart('chartProvidersLatency', labels, data.map(item => item.avgLatencyMs), '响应延迟 (ms)', '#bf877c');
+                } else {
+                    console.error('fetchDetailedAnalytics platform error:', platformRes.reason);
+                }
+
+                if (timelineRes.status === 'fulfilled') {
+                    const data = timelineRes.value;
+                    const labels = data.map(item => item.timestamp.includes('T') ? item.timestamp.split('T')[1].substring(0, 5) : item.timestamp);
+                    renderTimelineChart(labels, data.map(item => item.successCount), data.map(item => item.failureCount));
+                } else {
+                    console.error('fetchDetailedAnalytics timeline error:', timelineRes.reason);
+                }
+
+                if (errorDistRes.status === 'fulfilled') {
+                    const data = errorDistRes.value;
+                    renderBarChart('chartErrorsDistribution', data.byPlatform.map(item => item.platform), data.byPlatform.map(item => item.count), '错误次数', '#de7061');
+                } else {
+                    console.error('fetchDetailedAnalytics error-distribution error:', errorDistRes.reason);
+                }
+            } catch (err) {
+                console.error('Chart render error:', err);
+            }
+        }
+
+        function renderBarChart(canvasId, labels, data, datasetLabel, color) {
+            if (chartsInstance[canvasId]) {
+                chartsInstance[canvasId].destroy();
+            }
+            const ctx = document.getElementById(canvasId).getContext('2d');
+            chartsInstance[canvasId] = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: datasetLabel,
+                        data: data,
+                        backgroundColor: color,
+                        borderRadius: 6,
+                        borderWidth: 0
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            grid: { color: 'rgba(0, 0, 0, 0.05)' }
+                        },
+                        x: {
+                            grid: { display: false }
+                        }
+                    }
+                }
+            });
+        }
+
+        function renderTimelineChart(labels, successData, failureData) {
+            const canvasId = 'chartRequestsTimeline';
+            if (chartsInstance[canvasId]) {
+                chartsInstance[canvasId].destroy();
+            }
+            const ctx = document.getElementById(canvasId).getContext('2d');
+            chartsInstance[canvasId] = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        {
+                            label: '成功次数',
+                            data: successData,
+                            borderColor: '#7aa382',
+                            backgroundColor: 'rgba(122, 163, 130, 0.1)',
+                            fill: true,
+                            tension: 0.3,
+                            borderWidth: 2
+                        },
+                        {
+                            label: '失败次数',
+                            data: failureData,
+                            borderColor: '#de7061',
+                            backgroundColor: 'rgba(222, 112, 97, 0.1)',
+                            fill: true,
+                            tension: 0.3,
+                            borderWidth: 2
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            grid: { color: 'rgba(0, 0, 0, 0.05)' }
+                        },
+                        x: {
+                            grid: { display: false }
+                        }
+                    }
+                }
+            });
+        }
+
+        document.addEventListener('click', (e) => {
+            if (e.target.classList.contains('range-btn')) {
+                activeRange = e.target.getAttribute('data-range');
+                fetchDetailedAnalytics();
+            }
         });
     
         // --- TAB SWITCHING LOGIC ---
@@ -2819,6 +3921,12 @@
                 const hero = document.querySelector('.hero');
                 if (hero) {
                     hero.style.display = targetId === 'pane-models' ? 'block' : 'none';
+                }
+
+                if (targetId === 'pane-models') {
+                    fetchModelsStats();
+                } else if (targetId === 'pane-analysis') {
+                    fetchDetailedAnalytics();
                 }
             });
         });

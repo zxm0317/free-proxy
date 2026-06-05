@@ -166,10 +166,10 @@ class ProviderAdapter:
             return ids
         return get_provider_model_hints(self.provider.name)
 
-    def chat_text(self, model_id: str, prompt: str, max_tokens: int = 256) -> str:
+    def chat_text(self, model_id: str, prompt: str, max_tokens: int = 256, timeout: int | None = None) -> str:
         if self.provider.format == 'gemini':
-            return self._chat_gemini(model_id, prompt, max_tokens=max_tokens)
-        return self._chat_openai(model_id, prompt, max_tokens=max_tokens)
+            return self._chat_gemini(model_id, prompt, max_tokens=max_tokens, timeout=timeout)
+        return self._chat_openai(model_id, prompt, max_tokens=max_tokens, timeout=timeout)
 
     def chat_completions_raw(self, payload: JsonObject) -> tuple[int, dict[str, str], bytes]:
         if self.provider.format != 'openai':
@@ -335,7 +335,7 @@ class ProviderAdapter:
             return model_id.removeprefix('models/')
         return model_id
 
-    def _chat_openai(self, model_id: str, prompt: str, *, max_tokens: int) -> str:
+    def _chat_openai(self, model_id: str, prompt: str, *, max_tokens: int, timeout: int | None = None) -> str:
         payload: JsonObject = {
             'model': model_id,
             'messages': [{'role': 'user', 'content': prompt}],
@@ -347,19 +347,24 @@ class ProviderAdapter:
             '/chat/completions',
             payload,
             query=get_provider_required_query(self.provider.name),
-            timeout=self._request_timeout_seconds_for_model(model_id),
+            timeout=timeout if timeout is not None else self._request_timeout_seconds_for_model(model_id),
         )
         if status >= 400:
             self._raise_http_error(status, data, '连通失败')
         return self._extract_openai_text(data)
 
-    def _chat_gemini(self, model_id: str, prompt: str, *, max_tokens: int) -> str:
+    def _chat_gemini(self, model_id: str, prompt: str, *, max_tokens: int, timeout: int | None = None) -> str:
         payload: JsonObject = {
             'contents': [{'role': 'user', 'parts': [{'text': prompt}]}],
             'generationConfig': {'temperature': 0, 'maxOutputTokens': max_tokens},
         }
         path = f'/models/{self.normalize_model_id(model_id)}:generateContent'
-        status, _, data = self._request_json('POST', path, payload, timeout=self._request_timeout_seconds_for_model(model_id))
+        status, _, data = self._request_json(
+            'POST',
+            path,
+            payload,
+            timeout=timeout if timeout is not None else self._request_timeout_seconds_for_model(model_id)
+        )
         if status >= 400:
             self._raise_http_error(status, data, '连通失败')
         return self._extract_gemini_text(data)

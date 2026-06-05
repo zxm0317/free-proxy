@@ -146,6 +146,52 @@ def init_db(db_url: str) -> None:
                 PRIMARY KEY (provider, model)
             )
         """)
+        if db_url.startswith('sqlite:///'):
+            adapter.execute("""
+                CREATE TABLE IF NOT EXISTS requests (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    platform VARCHAR(255) NOT NULL,
+                    model_id VARCHAR(255) NOT NULL,
+                    key_id INTEGER,
+                    status VARCHAR(255) NOT NULL,
+                    input_tokens INTEGER NOT NULL DEFAULT 0,
+                    output_tokens INTEGER NOT NULL DEFAULT 0,
+                    latency_ms INTEGER NOT NULL DEFAULT 0,
+                    error TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+        else:
+            adapter.execute("""
+                CREATE TABLE IF NOT EXISTS requests (
+                    id SERIAL PRIMARY KEY,
+                    platform VARCHAR(255) NOT NULL,
+                    model_id VARCHAR(255) NOT NULL,
+                    key_id INTEGER,
+                    status VARCHAR(255) NOT NULL,
+                    input_tokens INTEGER NOT NULL DEFAULT 0,
+                    output_tokens INTEGER NOT NULL DEFAULT 0,
+                    latency_ms INTEGER NOT NULL DEFAULT 0,
+                    error TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+        adapter.execute("CREATE INDEX IF NOT EXISTS idx_requests_created_at ON requests(created_at)")
+        adapter.execute("CREATE INDEX IF NOT EXISTS idx_requests_platform ON requests(platform)")
+        adapter.execute("CREATE INDEX IF NOT EXISTS idx_requests_status_created_at ON requests(status, created_at)")
+        adapter.execute("CREATE INDEX IF NOT EXISTS idx_requests_platform_created_at ON requests(platform, created_at)")
+        adapter.execute("CREATE INDEX IF NOT EXISTS idx_requests_model_created_at ON requests(model_id, created_at)")
+        adapter.execute("CREATE INDEX IF NOT EXISTS idx_requests_platform_model_created_at ON requests(platform, model_id, created_at)")
+        adapter.execute("""
+            CREATE TABLE IF NOT EXISTS model_probe_results (
+                model_key VARCHAR(512) PRIMARY KEY,
+                ok BOOLEAN NOT NULL,
+                latency_ms INTEGER NOT NULL DEFAULT 0,
+                status INTEGER,
+                error TEXT,
+                checked_at INTEGER NOT NULL
+            )
+        """)
         adapter.commit()
         
         rows = adapter.fetchall("SELECT key_name, key_value FROM config_keys")
@@ -246,6 +292,76 @@ def get_model_usage_stats(db_url: str) -> list[dict[str, object]]:
     stats.sort(key=lambda x: x["usage_count"], reverse=True)
     return stats
 
+MODEL_PROBE_RESULTS_KEY = 'model_probe_results'
+
+def get_model_probe_results(db_url: str) -> dict[str, dict[str, object]]:
+    results: dict[str, dict[str, object]] = {}
+    raw = get_key(db_url, MODEL_PROBE_RESULTS_KEY)
+    if raw:
+        try:
+            data = json.loads(raw)
+            if isinstance(data, dict):
+                results.update({str(k): v for k, v in data.items() if isinstance(v, dict)})
+        except Exception:
+            pass
+
+    adapter = get_adapter(db_url)
+    try:
+        rows = adapter.fetchall(
+            "SELECT model_key, ok, latency_ms, status, error, checked_at FROM model_probe_results",
+            (),
+        )
+    except Exception:
+        return results
+    finally:
+        adapter.close()
+
+    for model_key, ok, latency_ms, status, error, checked_at in rows:
+        results[str(model_key)] = {
+            'ok': bool(ok),
+            'latency_ms': int(latency_ms or 0),
+            'status': status,
+            'error': str(error or ''),
+            'checked_at': int(checked_at or 0),
+        }
+    return results
+
+def save_model_probe_result(
+    db_url: str,
+    model_key: str,
+    *,
+    ok: bool,
+    latency_ms: int,
+    status: int | None = None,
+    error: str = '',
+) -> None:
+    adapter = get_adapter(db_url)
+    try:
+        adapter.execute(
+            """
+            INSERT INTO model_probe_results (model_key, ok, latency_ms, status, error, checked_at)
+            VALUES (%s, %s, %s, %s, %s, %s)
+            ON CONFLICT (model_key)
+            DO UPDATE SET
+                ok = EXCLUDED.ok,
+                latency_ms = EXCLUDED.latency_ms,
+                status = EXCLUDED.status,
+                error = EXCLUDED.error,
+                checked_at = EXCLUDED.checked_at
+            """,
+            (
+                model_key,
+                bool(ok),
+                max(0, int(latency_ms)),
+                status,
+                str(error or '')[:500],
+                int(time.time()),
+            ),
+        )
+        adapter.commit()
+    finally:
+        adapter.close()
+
 _manual_order_cache: list[str] | None = None
 _manual_order_cache_ts: float = 0
 
@@ -289,5 +405,32 @@ def get_manual_order(db_url: str, bypass_cache: bool = False) -> list[str]:
         return order
     except Exception:
         return []
+    finally:
+        adapter.close()
+
+def log_request(
+    db_url: str,
+    platform: str,
+    model_id: str,
+    status: str,
+    input_tokens: int,
+    output_tokens: int,
+    latency_ms: int,
+    error: str | None = None,
+    ttfb_ms: int | None = None
+) -> None:
+    """Logs a request attempt to the database for analytics."""
+    adapter = get_adapter(db_url)
+    try:
+        adapter.execute(
+            """
+            INSERT INTO requests (platform, model_id, key_id, status, input_tokens, output_tokens, latency_ms, error)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+            """,
+            (platform, model_id, 1, status, input_tokens, output_tokens, latency_ms, error)
+        )
+        adapter.commit()
+    except Exception as e:
+        print(f"Failed to log request: {e}")
     finally:
         adapter.close()

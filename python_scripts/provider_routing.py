@@ -129,7 +129,7 @@ def resolve_alias_candidates(
     return ordered
 
 
-def build_auto_candidates(*, requested_model: str | None, configured: list[str], health: HealthState, now_ts: int, ttl_seconds: int, manual_order: list[str] | None = None, disabled_models: list[str] | None = None) -> list[CandidateTarget]:
+def build_auto_candidates(*, requested_model: str | None, configured: list[str], health: HealthState, now_ts: int, ttl_seconds: int, manual_order: list[str] | None = None, disabled_models: list[str] | None = None, provider_models: dict[str, list[str]] | None = None) -> list[CandidateTarget]:
     ordered: list[CandidateTarget] = []
     seen: set[tuple[str, str]] = set()
 
@@ -150,7 +150,10 @@ def build_auto_candidates(*, requested_model: str | None, configured: list[str],
     
     ranked: list[tuple[int, int, int, int, str, str]] = []
     for provider_rank, provider_name in enumerate(configured):
-        hints = get_provider_model_hints(provider_name)
+        if provider_models and provider_name in provider_models:
+            hints = provider_models[provider_name]
+        else:
+            hints = get_provider_model_hints(provider_name)
         for model_id in hints:
             key = f'{provider_name}/{model_id}'
             

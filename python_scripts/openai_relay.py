@@ -40,6 +40,7 @@ class OpenAIRelay:
         usage_incrementer=None,
         manual_order_loader=None,
         disabled_models_loader=None,
+        request_logger=None,
     ) -> None:
         self.adapter_factory = adapter_factory
         self.health_loader = health_loader
@@ -51,6 +52,7 @@ class OpenAIRelay:
         self.usage_incrementer = usage_incrementer
         self.manual_order_loader = manual_order_loader
         self.disabled_models_loader = disabled_models_loader
+        self.request_logger = request_logger
 
     def normalize(self, payload: dict[str, object]) -> ChatRequest:
         return normalize_chat_request(payload)
@@ -372,6 +374,19 @@ class OpenAIRelay:
                 error_details.append(f"{candidate.provider}/{candidate.model}: {error_msg[:100]}")
                 failure = classify_error(0, error_msg)
                 self._record_health(candidate.provider, candidate.model, False, failure.category)
+                if self.request_logger:
+                    try:
+                        self.request_logger(
+                            candidate.provider,
+                            candidate.model,
+                            'error',
+                            len(self._prompt_from_messages(request.messages)) // 4,
+                            0,
+                            int((time.time() - start_time) * 1000),
+                            error_msg
+                        )
+                    except Exception:
+                        pass
                 if candidate.provider not in listed_loaded:
                     listed_loaded.add(candidate.provider)
                     candidates = self._append_provider_listed_candidate(candidates, candidate.provider, index)
@@ -387,17 +402,19 @@ class OpenAIRelay:
                 
                 if adapter_response.stream is not None:
                     headers_ms = int((time.time() - start_time) * 1000)
-                    def _timed_stream(stream, start_time_local, overall_start_local, headers_ms_local, cand_provider):
+                    def _timed_stream(stream, start_time_local, overall_start_local, headers_ms_local, cand_provider, cand_model):
                         first = True
                         accumulated_content = []
                         import json
                         from .response_normalizer import _normalize_tool_calls
+                        has_error = False
+                        error_msg = None
                         try:
                             for chunk in stream:
                                 if first:
                                     first_chunk_ms = int((time.time() - start_time_local) * 1000)
                                     if self.debug_log:
-                                        self.debug_log('route_timing', candidate_order=index, winner=f"{candidate.provider}/{candidate.model}", stream_headers_ms=headers_ms_local, first_chunk_ms=first_chunk_ms, route_build_ms=route_build_ms)
+                                        self.debug_log('route_timing', candidate_order=index, winner=f"{cand_provider}/{cand_model}", stream_headers_ms=headers_ms_local, first_chunk_ms=first_chunk_ms, route_build_ms=route_build_ms)
                                     first = False
                                     
                                 if not chunk.strip():
@@ -417,7 +434,6 @@ class OpenAIRelay:
                                 try:
                                     parsed_json = json.loads(data_str)
                                     choices = parsed_json.get('choices', [])
-                                    # Strict clients crash if choices is empty
                                     if not choices:
                                         continue
                                         
@@ -435,7 +451,6 @@ class OpenAIRelay:
                                             if 'delta' not in choices[0]:
                                                 choices[0]['delta'] = {}
                                                 
-                                            # In SSE streaming, tool_calls must have an 'index' field
                                             stream_tool_calls = []
                                             for i, tc in enumerate(parsed_tc.tool_calls):
                                                 stc = dict(tc)
@@ -449,12 +464,32 @@ class OpenAIRelay:
                                 except Exception:
                                     pass
                                 yield chunk
+                        except Exception as stream_err:
+                            has_error = True
+                            error_msg = str(stream_err)
+                            raise stream_err
                         finally:
                             if hasattr(stream, 'close'):
                                 stream.close()
                             if self.debug_log:
                                 total_ms = int((time.time() - overall_start_local) * 1000)
                                 self.debug_log('route_timing_total', total_ms=total_ms)
+                            if self.request_logger:
+                                try:
+                                    total_out_tokens = len("".join(accumulated_content)) // 4
+                                    status = 'error' if has_error else 'success'
+                                    latency_ms = int((time.time() - start_time_local) * 1000)
+                                    self.request_logger(
+                                        cand_provider,
+                                        cand_model,
+                                        status,
+                                        len(self._prompt_from_messages(request.messages)) // 4,
+                                        total_out_tokens,
+                                        latency_ms,
+                                        error_msg
+                                    )
+                                except Exception:
+                                    pass
                     return RelayResponse(
                         status=adapter_response.status,
                         headers={
@@ -463,10 +498,23 @@ class OpenAIRelay:
                             'X-Fallback-Attempts': str(index - 1)
                         },
                         body=None,
-                        stream_chunks=_timed_stream(adapter_response.stream, start_time, overall_start, headers_ms, candidate.provider)
+                        stream_chunks=_timed_stream(adapter_response.stream, start_time, overall_start, headers_ms, candidate.provider, candidate.model)
                     )
 
                 if adapter_response.body is None:
+                    if self.request_logger:
+                        try:
+                            self.request_logger(
+                                candidate.provider,
+                                candidate.model,
+                                'success',
+                                len(self._prompt_from_messages(request.messages)) // 4,
+                                0,
+                                int((time.time() - start_time) * 1000),
+                                None
+                            )
+                        except Exception:
+                            pass
                     return RelayResponse(
                         200,
                         {
@@ -485,22 +533,58 @@ class OpenAIRelay:
                 )
                 if resp.stream_chunks is not None:
                     headers_ms = int((time.time() - start_time) * 1000)
-                    def _timed_stream_local(stream, start_time_local, overall_start_local, headers_ms_local):
+                    def _timed_stream_local(stream, start_time_local, overall_start_local, headers_ms_local, cand_provider, cand_model):
                         first = True
+                        accumulated_content = []
+                        has_error = False
+                        error_msg = None
                         try:
                             for chunk in stream:
                                 if first:
                                     first_chunk_ms = int((time.time() - start_time_local) * 1000)
                                     if self.debug_log:
-                                        self.debug_log('route_timing', candidate_order=index, winner=f"{candidate.provider}/{candidate.model}", stream_headers_ms=headers_ms_local, first_chunk_ms=first_chunk_ms, route_build_ms=route_build_ms)
+                                        self.debug_log('route_timing', candidate_order=index, winner=f"{cand_provider}/{cand_model}", stream_headers_ms=headers_ms_local, first_chunk_ms=first_chunk_ms, route_build_ms=route_build_ms)
                                     first = False
+                                try:
+                                    decoded = chunk.decode('utf-8', errors='ignore')
+                                    if decoded.startswith('data:'):
+                                        data_str = decoded[5:].strip()
+                                        if data_str != '[DONE]':
+                                            parsed = json.loads(data_str)
+                                            choices = parsed.get('choices', [])
+                                            if choices:
+                                                content = choices[0].get('delta', {}).get('content')
+                                                if content:
+                                                    accumulated_content.append(content)
+                                except Exception:
+                                    pass
                                 yield chunk
+                        except Exception as stream_err:
+                            has_error = True
+                            error_msg = str(stream_err)
+                            raise stream_err
                         finally:
                             if hasattr(stream, 'close'):
                                 stream.close()
                             if self.debug_log:
                                 total_ms = int((time.time() - overall_start_local) * 1000)
                                 self.debug_log('route_timing_total', total_ms=total_ms)
+                            if self.request_logger:
+                                try:
+                                    total_out_tokens = len("".join(accumulated_content)) // 4
+                                    status = 'error' if has_error else 'success'
+                                    latency_ms = int((time.time() - start_time_local) * 1000)
+                                    self.request_logger(
+                                        cand_provider,
+                                        cand_model,
+                                        status,
+                                        len(self._prompt_from_messages(request.messages)) // 4,
+                                        total_out_tokens,
+                                        latency_ms,
+                                        error_msg
+                                    )
+                                except Exception:
+                                    pass
                     resp = RelayResponse(
                         status=resp.status,
                         headers={
@@ -509,9 +593,30 @@ class OpenAIRelay:
                             'X-Fallback-Attempts': str(index - 1)
                         },
                         body=resp.body,
-                        stream_chunks=_timed_stream_local(resp.stream_chunks, start_time, overall_start, headers_ms)
+                        stream_chunks=_timed_stream_local(resp.stream_chunks, start_time, overall_start, headers_ms, candidate.provider, candidate.model)
                     )
                 else:
+                    if self.request_logger:
+                        try:
+                            latency_ms = int((time.time() - start_time) * 1000)
+                            try:
+                                parsed = json.loads(resp.body.decode('utf-8'))
+                                input_tokens = parsed.get('usage', {}).get('prompt_tokens', 0)
+                                output_tokens = parsed.get('usage', {}).get('completion_tokens', 0)
+                            except Exception:
+                                input_tokens = len(self._prompt_from_messages(request.messages)) // 4
+                                output_tokens = 0
+                            self.request_logger(
+                                candidate.provider,
+                                candidate.model,
+                                'success',
+                                input_tokens,
+                                output_tokens,
+                                latency_ms,
+                                None
+                            )
+                        except Exception:
+                            pass
                     resp = RelayResponse(
                         status=resp.status,
                         headers={
@@ -532,8 +637,20 @@ class OpenAIRelay:
             if self.debug_log:
                 self.debug_log('upstream_error_details', provider=candidate.provider, model=candidate.model, status=adapter_response.status, raw_body=body_bytes.decode('utf-8', errors='ignore'))
             
-            # ONLY melt the model if the error is a genuine provider/availability issue.
-            # Client errors like token_limit (413) or unknown (400 invalid param) should NOT melt the model globally.
+            if self.request_logger:
+                try:
+                    self.request_logger(
+                        candidate.provider,
+                        candidate.model,
+                        'error',
+                        len(self._prompt_from_messages(request.messages)) // 4,
+                        0,
+                        int((time.time() - start_time) * 1000),
+                        failure.message
+                    )
+                except Exception:
+                    pass
+
             if failure.category in ('server', 'network', 'rate_limit', 'auth', 'quota', 'model_not_found'):
                 self._record_health(candidate.provider, candidate.model, False, failure.category)
                 

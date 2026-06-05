@@ -9,7 +9,7 @@ from collections.abc import Callable, Iterable
 from pathlib import Path
 
 from .config import DOTENV_PATH, hydrate_env, load_dotenv
-from .db_store import get_all_keys, get_key, init_db, upsert_key, increment_model_usage, get_model_usage_stats, get_manual_order, save_manual_order
+from .db_store import get_all_keys, get_key, init_db, upsert_key, increment_model_usage, get_model_usage_stats, get_manual_order, save_manual_order, log_request, get_model_probe_results, save_model_probe_result
 from .errors import classify_error, remediation_suggestion
 from .health_store import load_health, upsert_health
 from .openai_relay import OpenAIRelay
@@ -161,6 +161,7 @@ class ProxyService:
             usage_incrementer=lambda provider, model: increment_model_usage(self.db_url, provider, model),
             manual_order_loader=self.get_manual_order,
             disabled_models_loader=self.get_disabled_models,
+            request_logger=lambda platform, model_id, status, input_tokens, output_tokens, latency_ms, error=None: log_request(self.db_url, platform, model_id, status, input_tokens, output_tokens, latency_ms, error),
         )
 
     def get_usage_stats(self) -> list[dict[str, object]]:
@@ -270,6 +271,24 @@ class ProxyService:
                 disabled.append(model_key)
         upsert_key(self.db_url, 'disabled_models', json.dumps(disabled))
         return {'ok': True}
+
+    def record_model_probe_result(
+        self,
+        model_key: str,
+        *,
+        ok: bool,
+        latency_ms: int,
+        status: int | None = None,
+        error: str = '',
+    ) -> None:
+        save_model_probe_result(
+            self.db_url,
+            model_key,
+            ok=ok,
+            latency_ms=latency_ms,
+            status=status,
+            error=error,
+        )
 
     def get_custom_models(self) -> list[dict[str, object]]:
         data_str = get_key(self.db_url, 'custom_openai_models')
@@ -449,10 +468,10 @@ class ProxyService:
     def list_models(self, provider_name: str) -> list[str]:
         return self.provider_adapter(provider_name).list_models()
 
-    def probe(self, provider_name: str, model_id: str) -> ProbeResult:
-        return self.chat(provider_name, model_id, prompt='ok', max_output_tokens=probe_output_tokens(provider_name, model_id))
+    def probe(self, provider_name: str, model_id: str, timeout: int | None = None) -> ProbeResult:
+        return self.chat(provider_name, model_id, prompt='ok', max_output_tokens=1, timeout=timeout)
 
-    def chat(self, provider_name: str, model_id: str, prompt: str, max_output_tokens: int | None = None) -> ProbeResult:
+    def chat(self, provider_name: str, model_id: str, prompt: str, max_output_tokens: int | None = None, timeout: int | None = None) -> ProbeResult:
         adapter = self.provider_adapter(provider_name)
         trimmed = trim_prompt(provider_name, prompt)
         candidates = [model_id]
@@ -473,7 +492,7 @@ class ProxyService:
                 model_metadata=None,
             )
             try:
-                content = adapter.chat_text(candidate, budget.trimmed_prompt, max_tokens=budget.output_tokens_limit)
+                content = adapter.chat_text(candidate, budget.trimmed_prompt, max_tokens=budget.output_tokens_limit, timeout=timeout)
                 upsert_health(provider_name, candidate, True, path=self.health_path)
                 return ProbeResult(provider=provider_name, model=model_id, ok=True, actual_model=candidate, content=content)
             except ProviderError as exc:
@@ -510,7 +529,7 @@ class ProxyService:
                         model_metadata=None,
                     )
                     try:
-                        retry_content = adapter.chat_text(candidate, retry_budget.trimmed_prompt, max_tokens=retry_budget.output_tokens_limit)
+                        retry_content = adapter.chat_text(candidate, retry_budget.trimmed_prompt, max_tokens=retry_budget.output_tokens_limit, timeout=timeout)
                         upsert_health(provider_name, candidate, True, path=self.health_path)
                         return ProbeResult(provider=provider_name, model=model_id, ok=True, actual_model=candidate, content=retry_content)
                     except ProviderError as retry_exc:
@@ -544,26 +563,51 @@ class ProxyService:
                 providers.append({'provider': provider_name, 'error': str(exc), 'models': []})
         return {'providers': providers}
         
+    def get_cached_provider_models(self, provider_name: str) -> list[str]:
+        now = time.time()
+        if not hasattr(self, '_models_cache'):
+            self._models_cache = {}
+        if provider_name in self._models_cache:
+            models, expiry = self._models_cache[provider_name]
+            if now < expiry:
+                return models
+        try:
+            adapter = self.provider_adapter(provider_name)
+            models = adapter.list_models()
+        except Exception:
+            from .provider_catalog import get_provider_model_hints
+            models = get_provider_model_hints(provider_name)
+        self._models_cache[provider_name] = (models, now + 300)
+        return models
+
     def models_stats(self) -> dict[str, object]:
         from .provider_routing import build_auto_candidates
         from .scoring import expected_reliability, synthetic_speed_score, synthetic_intelligence_score, headroom_factor, combine_score, BANDIT_PRESETS, get_model_limits
         health = load_health(self.health_path)
         manual_order = self.get_manual_order()
+        probe_results = get_model_probe_results(self.db_url)
         
         db_keys = get_all_keys(self.db_url)
-        all_configured = configured_provider_names(db_keys)
+        configured_names = configured_provider_names(db_keys)
+        all_configured = list(configured_names)
         custom_models = self.get_custom_models()
         for cm in custom_models:
             if cm['id'] not in all_configured:
                 all_configured.append(cm['id'])
                 
         disabled = self.get_disabled_providers()
-        active_set = set(all_configured) - set(disabled)
+        active_set = set(configured_names) - set(disabled)
         for cm in custom_models:
             if cm.get('enabled', True) is False and cm['id'] in active_set:
                 active_set.remove(cm['id'])
 
         disabled_models = self.get_disabled_models()
+
+        provider_models = {}
+        for p_name in configured_names:
+            if p_name.startswith('custom-'):
+                continue
+            provider_models[p_name] = self.get_cached_provider_models(p_name)
 
         candidates = build_auto_candidates(
             requested_model=None,
@@ -571,12 +615,15 @@ class ProxyService:
             health=health,
             now_ts=int(time.time()),
             ttl_seconds=self.health_ttl_seconds,
-            manual_order=manual_order
+            manual_order=manual_order,
+            provider_models=provider_models
         )
         stats = []
         for i, c in enumerate(candidates):
             key = f"{c.provider}/{c.model}"
             entry = health.get(key, {})
+            probe = probe_results.get(key, {})
+            probe_ok = probe.get('ok') if isinstance(probe, dict) else None
             
             # Use freellmapi Bandit logic for display!
             success_streak = int(entry.get('success_streak', 0)) if isinstance(entry, dict) else 0
@@ -611,6 +658,10 @@ class ProxyService:
                 'int': int(intel * 100),
                 'headroom': float(f"{headroom:.2f}"),
                 'ok': entry.get('ok') if isinstance(entry, dict) else None,
+                'probe_status': 'success' if probe_ok is True else 'failed' if probe_ok is False else 'untested',
+                'latency_ms': probe.get('latency_ms') if isinstance(probe.get('latency_ms'), int) else None,
+                'probe_checked_at': probe.get('checked_at') if isinstance(probe.get('checked_at'), int) else None,
+                'probe_error': str(probe.get('error') or '') if isinstance(probe, dict) else '',
                 'rate_limits': rate_limits,
                 'observations': success_streak + failure_streak,
                 'monthly_token_budget': limits['monthly_token_budget'],
