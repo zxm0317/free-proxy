@@ -619,9 +619,8 @@ class ProxyService:
                 'enabled': (c.provider in active_set) and (key not in disabled_models)
             })
             
-        # Re-sort using our calculated bandit score instead of the simple health rank
-        stats.sort(key=lambda x: x['score'], reverse=True)
-        return {'models': stats, 'strategy': 'balanced'}
+        # Keep the order of candidates (which respects manual_order and capabilities)
+        return {'models': stats, 'strategy': 'priority'}
 
     def resolve_openai_target(self, payload: JsonObject) -> ResolvedOpenAIRequest:
         raw_model = payload.get('model')
