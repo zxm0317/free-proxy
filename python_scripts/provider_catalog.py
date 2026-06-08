@@ -147,13 +147,42 @@ PROVIDERS: list[ProviderMeta] = [
         'openai',
         model_hints=('free-proxy/auto',),
     ),
+    ProviderMeta(
+        'qoder',
+        'https://api3.qoder.sh',
+        'QODER_ACCOUNT_TOKEN',
+        'openai',
+        model_hints=(
+            'auto',
+            'ultimate',
+            'performance',
+            'efficient',
+            'lite',
+            'qmodel',
+            'qmodel_latest',
+            'dmodel',
+            'dfmodel',
+            'gm51model',
+            'kmodel',
+            'mmodel',
+        ),
+    ),
 ]
 PROVIDER_MAP: dict[str, ProviderMeta] = {provider.name: provider for provider in PROVIDERS}
 
 
+def clear_custom_providers() -> None:
+    stale_names = [provider.name for provider in PROVIDERS if provider.name.startswith('custom-')]
+    if not stale_names:
+        return
+    stale = set(stale_names)
+    PROVIDERS[:] = [provider for provider in PROVIDERS if provider.name not in stale]
+    for name in stale:
+        PROVIDER_MAP.pop(name, None)
+
+
 def register_custom_provider(name: str, base_url: str, api_key_env: str, format: FormatType, model_hints: Iterable[str]) -> None:
     global PROVIDERS, PROVIDER_MAP
-    # Remove existing dynamic provider with same name if exists in-place
     for p in list(PROVIDERS):
         if p.name == name:
             PROVIDERS.remove(p)

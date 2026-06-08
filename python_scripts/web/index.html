@@ -966,36 +966,6 @@
             opacity: 0.8;
         }
 
-        /* Strategy Tabs */
-        .strategy-tabs {
-            display: inline-flex;
-            gap: 4px;
-            background: #f1f3f0;
-            padding: 4px;
-            border-radius: 12px;
-            border: 1px solid var(--line);
-            margin-bottom: 12px;
-        }
-        .strategy-btn {
-            border: none;
-            outline: none;
-            background: transparent;
-            padding: 6px 12px;
-            font-size: 12px;
-            font-weight: 500;
-            border-radius: 8px;
-            cursor: pointer;
-            color: var(--muted);
-            transition: all 0.2s ease;
-        }
-        .strategy-btn:hover {
-            color: var(--text);
-        }
-        .strategy-btn.active {
-            background: #182018;
-            color: #fffdfa;
-        }
-
         /* Budget Card Styles */
         .budget-card {
             border-radius: 24px;
@@ -1367,26 +1337,18 @@
                 <!-- Routing Strategy Card -->
                 <div style="border-radius: 24px; border: 1px solid var(--line); background: #ffffff; padding: 20px; margin-bottom: 24px;">
                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
-                        <h3 style="font-size: 14px; font-weight: 600; margin: 0; color: var(--text);">路由策略</h3>
-                        <div style="display: flex; align-items: center; gap: 12px;">
-                            <button id="speedTestBtn" onclick="runSpeedTest()" style="padding: 6px 16px; border-radius: 9999px; background: linear-gradient(135deg, #3b82f6, #2563eb); color: #fff; border: none; font-size: 12px; font-weight: 500; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; box-shadow: 0 4px 12px rgba(37,99,235,0.2); transition: all 0.2s;">
-                                <svg style="width: 14px; height: 14px;" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
-                                一键测速
-                            </button>
-                            <span id="strategyWeights" style="font-size: 12px; color: var(--muted); font-family: monospace;"></span>
-                        </div>
-                    </div>
-                    <div class="strategy-tabs">
-                        <button class="strategy-btn active" id="strat-priority" onclick="setStrategy('priority')">手动</button>
-                        <button class="strategy-btn" id="strat-balanced" onclick="setStrategy('balanced')">均衡</button>
-                        <button class="strategy-btn" id="strat-smartest" onclick="setStrategy('smartest')">最聪明的</button>
-                        <button class="strategy-btn" id="strat-fastest" onclick="setStrategy('fastest')">最快</button>
-                        <button class="strategy-btn" id="strat-reliable" onclick="setStrategy('reliable')">最可靠</button>
+                        <h3 style="font-size: 14px; font-weight: 600; margin: 0; color: var(--text);">调用顺序</h3>
                     </div>
                     <p id="strategyBlurb" style="margin-top: 8px; margin-bottom: 0; font-size: 12px; color: var(--muted);">
-                        手动模式：请求按以下顺序排列，从上到下。拖动即可重新排序。
+                        测速只过滤不可用模型；调用顺序按智力、速度、可靠性排序。
                     </p>
+                    <div id="runtimeModelStatus" style="margin-top: 12px; display: inline-flex; align-items: center; gap: 8px; padding: 7px 12px; border-radius: 999px; background: #f6f8f6; color: var(--muted); font-size: 12px; line-height: 1.4; border: 1px solid var(--line);">
+                        <span style="width: 7px; height: 7px; border-radius: 50%; background: #9ca3af; display: inline-block;"></span>
+                        <span>当前调用：空闲</span>
+                    </div>
                 </div>
+
+                <div id="pendingProbeSection" style="margin-bottom: 18px;"></div>
 
                 <!-- Table Container -->
                 <div class="table-container" style="overflow-x: auto; border: 1px solid var(--line); border-radius: 20px; background: #fff;">
@@ -1482,8 +1444,9 @@
                         <div class="subtle" style="margin-top: 4px;">请求量、延迟、Token 消耗以及错误率的全面统计分析。</div>
                     </div>
                     <div style="display: flex; gap: 6px; background: rgba(221, 229, 215, 0.4); padding: 4px; border-radius: 12px; border: 1px solid var(--line);">
+                        <button class="btn btn-secondary btn-sm active-range range-btn" data-range="today" style="padding: 6px 12px; border-radius: 8px; font-size: 13px; font-weight: 500; cursor: pointer; border: none; background: var(--panel-strong); box-shadow: 0 2px 8px rgba(0,0,0,0.05); color: var(--primary);">今天</button>
                         <button class="btn btn-secondary btn-sm active-range range-btn" data-range="24h" style="padding: 6px 12px; border-radius: 8px; font-size: 13px; font-weight: 500; cursor: pointer; border: none; background: transparent; color: var(--text);">24h</button>
-                        <button class="btn btn-secondary btn-sm active-range range-btn" data-range="7d" style="padding: 6px 12px; border-radius: 8px; font-size: 13px; font-weight: 500; cursor: pointer; border: none; background: var(--panel-strong); box-shadow: 0 2px 8px rgba(0,0,0,0.05); color: var(--primary);">7d</button>
+                        <button class="btn btn-secondary btn-sm active-range range-btn" data-range="7d" style="padding: 6px 12px; border-radius: 8px; font-size: 13px; font-weight: 500; cursor: pointer; border: none; background: transparent; color: var(--text);">7d</button>
                         <button class="btn btn-secondary btn-sm active-range range-btn" data-range="30d" style="padding: 6px 12px; border-radius: 8px; font-size: 13px; font-weight: 500; cursor: pointer; border: none; background: transparent; color: var(--text);">30d</button>
                     </div>
                 </div>
@@ -1632,6 +1595,7 @@
         let currentModelsOrder = [];
         let showFailedModels = false;
         let showUntestedModels = false;
+        let showAnalysisHiddenModels = false;
         let dragSrcKey = null;
         const PROBE_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
         const toast = document.getElementById('toast');
@@ -1678,6 +1642,21 @@
             localStorage.setItem('py-ui-active-provider', state.activeProvider);
             localStorage.setItem('py-ui-selected-provider', state.selectedProvider || '');
             localStorage.setItem('py-ui-selected-model', state.selectedModel || '');
+        }
+
+        function clearSelectionForProvider(providerId) {
+            if (state.selectedProvider === providerId) {
+                state.selectedProvider = '';
+                state.selectedModel = '';
+            }
+            if (state.activeProvider === providerId) {
+                state.activeProvider = 'all';
+            }
+            if (chatProvider && chatProvider.value === providerId) {
+                chatProvider.value = '';
+                chatModel.value = '';
+            }
+            persistSelection();
         }
 
         async function logout() {
@@ -1853,11 +1832,13 @@
 
         function playgroundAvailableModels() {
             return currentModelsOrder
-                .filter((item) => item && item.enabled !== false && item.probe_status === 'success')
+                .filter((item) => item && item.enabled !== false && item.probe_status === 'success' && item.analysis_status !== 'hidden')
                 .map((item) => ({
                     value: `${item.provider}/${item.model}`,
-                    label: item.model,
-                    provider: item.provider,
+                    label: modelKeyLabel(item),
+                    name: modelNameLabel(item),
+                    provider: providerLabel(item),
+                    providerLabel: providerLabel(item),
                     latency: item.latency_ms,
                 }));
         }
@@ -1882,7 +1863,7 @@
                 return '自动（备用链）';
             }
             const selected = playgroundAvailableModels().find((item) => item.value === playgroundModelSelect.value);
-            return selected ? `${selected.label} (${selected.provider})` : playgroundModelSelect.value;
+            return selected ? `${selected.label}${selected.name ? ` (${selected.name})` : ''}` : playgroundModelSelect.value;
         }
 
         function renderPlaygroundMessages() {
@@ -2018,6 +1999,89 @@
             return key.slice(0, 4) + '...' + key.slice(-4);
         }
 
+        function accountProviderName(providerId) {
+            const status = state.statuses[providerId] || {};
+            return status.name || status.display_name || providerId;
+        }
+
+        function renderAccountProviderCard(providerId, status) {
+            const providerName = accountProviderName(providerId);
+            const accounts = Array.isArray(status.accounts) ? status.accounts : [];
+            return `
+                    <div class="keys-provider-group">
+                        <div class="keys-provider-header">
+                            <div class="keys-provider-info">
+                                <span class="${accounts.length ? 'keys-status-dot healthy' : 'keys-status-dot warning'}"></span>
+                                <span class="keys-provider-name">${escapeHtml(providerName)}</span>
+                            </div>
+                            <span class="keys-provider-count">${accounts.length} 璐﹀彿${accounts.length > 1 ? ' 路 杞' : ''}</span>
+                        </div>
+                        <div class="keys-provider-keys-container" style="display: flex; flex-direction: column; gap: 0px;">
+                            ${accounts.map((account) => `
+                                <div class="keys-key-row" style="display: flex; align-items: center; justify-content: space-between; padding: 10px 16px;">
+                                    <div style="display: flex; align-items: center; gap: 8px;">
+                                        <span class="keys-status-dot healthy"></span>
+                                        <span style="font-weight: 500; font-size: 12px; color: var(--text); min-width: 80px;">${escapeHtml(account.label || account.email || account.id)}</span>
+                                        <span class="keys-key-masked" style="font-family: monospace; font-size: 11px;">${escapeHtml(account.token || '***')}</span>
+                                        <span class="keys-key-status-text" style="font-size: 11px;">${escapeHtml(account.status || 'active')}</span>
+                                    </div>
+                                    <div class="keys-key-actions" style="display: flex; gap: 4px; margin-left: auto;">
+                                        <button onclick="removeAccountProviderAccount('${providerId}', '${account.id}')" style="padding: 2px 8px; font-size: 11px;">鍒犻櫎</button>
+                                    </div>
+                                </div>
+                            `).join('')}
+                            <div class="keys-key-row" style="display: flex; align-items: center; justify-content: flex-end; gap: 8px; padding: 10px 16px;">
+                                <button class="btn btn-secondary" onclick="startAccountProviderLogin('${providerId}', this)" style="padding: 5px 10px; font-size: 12px;">鐧诲綍 ${escapeHtml(providerName)}</button>
+                                <button class="btn btn-primary" onclick="validateAccountProvider('${providerId}', this)" style="padding: 5px 10px; font-size: 12px;" ${accounts.length ? '' : 'disabled'}>楠岃瘉 / 鍔犺浇妯″瀷</button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+        }
+
+        function accountProviderName(providerId) {
+            const status = state.statuses[providerId] || {};
+            const provider = PROVIDERS.find((item) => item.id === providerId);
+            const fallbackNames = { qoder: 'Qoder' };
+            return status.name || status.display_name || (provider && provider.name) || fallbackNames[providerId] || providerId;
+        }
+
+        function renderAccountProviderCard(providerId, status) {
+            const providerName = accountProviderName(providerId);
+            const accounts = Array.isArray(status.accounts) ? status.accounts : [];
+            const accountText = `${accounts.length} \u8d26\u53f7${accounts.length > 1 ? ' \u00b7 \u8f6e\u8be2' : ''}`;
+            return `
+                <div class="keys-provider-group">
+                    <div class="keys-provider-header">
+                        <div class="keys-provider-info">
+                            <span class="${accounts.length ? 'keys-status-dot healthy' : 'keys-status-dot warning'}"></span>
+                            <span class="keys-provider-name">${escapeHtml(providerName)}</span>
+                        </div>
+                        <span class="keys-provider-count">${accountText}</span>
+                    </div>
+                    <div class="keys-provider-keys-container" style="display: flex; flex-direction: column; gap: 0px;">
+                        ${accounts.map((account) => `
+                            <div class="keys-key-row" style="display: flex; align-items: center; justify-content: space-between; padding: 10px 16px;">
+                                <div style="display: flex; align-items: center; gap: 8px;">
+                                    <span class="keys-status-dot healthy"></span>
+                                    <span style="font-weight: 500; font-size: 12px; color: var(--text); min-width: 80px;">${escapeHtml(account.label || account.email || account.id)}</span>
+                                    <span class="keys-key-masked" style="font-family: monospace; font-size: 11px;">${escapeHtml(account.token || '***')}</span>
+                                    <span class="keys-key-status-text" style="font-size: 11px;">${escapeHtml(account.status || 'active')}</span>
+                                </div>
+                                <div class="keys-key-actions" style="display: flex; gap: 4px; margin-left: auto;">
+                                    <button onclick="removeAccountProviderAccount('${providerId}', '${account.id}')" style="padding: 2px 8px; font-size: 11px;">\u5220\u9664</button>
+                                </div>
+                            </div>
+                        `).join('')}
+                        <div class="keys-key-row" style="display: flex; align-items: center; justify-content: flex-end; gap: 8px; padding: 10px 16px;">
+                            <button class="btn btn-secondary" onclick="startAccountProviderLogin('${providerId}', this)" style="padding: 5px 10px; font-size: 12px;">\u767b\u5f55 ${escapeHtml(providerName)}</button>
+                            <button class="btn btn-primary" onclick="validateAccountProvider('${providerId}', this)" style="padding: 5px 10px; font-size: 12px;" ${accounts.length ? '' : 'disabled'}>\u9a8c\u8bc1 / \u52a0\u8f7d\u6a21\u578b</button>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
         function renderProviderCards() {
             const baseUrl = window.location.protocol + '//' + window.location.host + '/v1';
             const baseEl = document.getElementById('proxyBaseUrlDisplay');
@@ -2026,29 +2090,18 @@
             const listContainer = document.getElementById('keysConfiguredProvidersList');
             if (!listContainer) return;
 
-            const configuredStandard = PROVIDERS.filter(p => state.statuses[p.id]?.configured);
+            const configuredStandard = PROVIDERS.filter(p => state.statuses[p.id]?.configured && !state.statuses[p.id]?.account_provider);
+            const configuredAccountProviders = Object.entries(state.statuses || {})
+                .filter(([, status]) => status && status.account_provider);
             let html = '';
+
+            for (const [providerId, status] of configuredAccountProviders) {
+                html += renderAccountProviderCard(providerId, status);
+            }
 
             for (const provider of configuredStandard) {
                 const status = state.statuses[provider.id];
-                const verify = state.verifyResults[provider.id];
-                const isEditing = Boolean(state.editing[provider.id]);
                 
-                let statusDotClass = 'keys-status-dot';
-                let statusText = '未验证';
-                let verifyTimeStr = '';
-                if (verify) {
-                    if (verify.ok) {
-                        statusDotClass += ' healthy';
-                        statusText = '健康';
-                    } else {
-                        statusDotClass += ' error';
-                        statusText = '错误';
-                    }
-                    const now = new Date();
-                    verifyTimeStr = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
-                }
-
                 html += `
                     <div class="keys-provider-group">
                         <div class="keys-provider-header">
@@ -2059,81 +2112,151 @@
                                 </label>
                                 <span class="keys-provider-name">${provider.name}</span>
                             </div>
-                            <span class="keys-provider-count">1 钥匙</span>
+                            <span class="keys-provider-count">${status.keys ? status.keys.length : 1} 账号</span>
                         </div>
-                        <div class="keys-provider-keys-container">
-                            ${isEditing ? `
-                                <div class="keys-key-row" style="gap: 8px; width: 100%;">
-                                    <input type="password" class="field" id="keys-edit-input-${provider.id}" placeholder="输入新的 API Key" autocomplete="off" style="flex: 1; font-size: 12px; padding: 6px 10px;">
-                                    <button class="btn btn-primary" onclick="saveEditedProviderKey('${provider.id}', this)" style="padding: 4px 10px; font-size: 11px; border-radius: 6px;">保存</button>
-                                    <button class="btn btn-ghost" onclick="cancelEditProviderKey('${provider.id}')" style="padding: 4px 10px; font-size: 11px; border-radius: 6px;">取消</button>
+                        <div class="keys-provider-keys-container" style="display: flex; flex-direction: column; gap: 0px;">
+                `;
+
+                if (status.keys && status.keys.length > 0) {
+                    for (const key of status.keys) {
+                        const cacheKey = provider.id + '_' + key.id;
+                        const verify = state.verifyResults[cacheKey];
+                        const isEditing = Boolean(state.editing[cacheKey]);
+                        
+                        let statusDotClass = 'keys-status-dot';
+                        let statusText = '未验证';
+                        let verifyTimeStr = '';
+                        if (verify) {
+                            if (verify.ok) {
+                                statusDotClass += ' healthy';
+                                statusText = '健康';
+                            } else {
+                                statusDotClass += ' error';
+                                statusText = '错误';
+                            }
+                            const now = new Date();
+                            verifyTimeStr = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
+                        }
+
+                        if (isEditing) {
+                            html += `
+                                <div class="keys-key-row" style="gap: 8px; width: 100%; display: flex; align-items: center; padding: 10px 16px;">
+                                    <span style="font-size: 11px; color: var(--text-muted); min-width: 60px;">${escapeHtml(key.label)}:</span>
+                                    <input type="text" class="field" id="keys-edit-label-${provider.id}-${key.id}" placeholder="修改标签" value="${escapeHtml(key.label)}" autocomplete="off" style="width: 100px; font-size: 12px; padding: 6px 10px;">
+                                    <input type="password" class="field" id="keys-edit-input-${provider.id}-${key.id}" placeholder="输入新的 API Key" autocomplete="off" style="flex: 1; font-size: 12px; padding: 6px 10px;">
+                                    <button class="btn btn-primary" onclick="saveEditedProviderKey('${provider.id}', '${key.id}', this)" style="padding: 4px 10px; font-size: 11px; border-radius: 6px;">保存</button>
+                                    <button class="btn btn-ghost" onclick="state.editing['${cacheKey}'] = false; renderProviderCards();" style="padding: 4px 10px; font-size: 11px; border-radius: 6px;">取消</button>
                                 </div>
-                            ` : `
-                                <div class="keys-key-row">
-                                    <span class="${statusDotClass}"></span>
-                                    <span class="keys-key-masked">${escapeHtml(status.masked || '••••••••')}</span>
-                                    <span class="keys-key-status-text">${statusText}</span>
-                                    <span class="keys-key-time">${verifyTimeStr}</span>
-                                    <div class="keys-key-actions">
-                                        <button onclick="verifyProviderDirectly('${provider.id}', this)">验证</button>
-                                        <button onclick="editProviderKey('${provider.id}')">编辑</button>
-                                        <button class="remove" onclick="removeProviderKey('${provider.id}')">清除</button>
+                            `;
+                        } else {
+                            html += `
+                                <div class="keys-key-row" style="display: flex; align-items: center; justify-content: space-between; padding: 10px 16px;">
+                                    <div style="display: flex; align-items: center; gap: 8px;">
+                                        <span class="${statusDotClass}"></span>
+                                        <span style="font-weight: 500; font-size: 12px; color: var(--text); min-width: 60px;">${escapeHtml(key.label)}</span>
+                                        <span class="keys-key-masked" style="font-family: monospace; font-size: 11px;">${escapeHtml(key.masked || '••••••••')}</span>
+                                        <span class="keys-key-status-text" style="font-size: 11px;">${statusText}</span>
+                                        <span class="keys-key-time" style="font-size: 10px; color: var(--muted);">${verifyTimeStr}</span>
+                                    </div>
+                                    <div class="keys-key-actions" style="display: flex; gap: 4px; margin-left: auto;">
+                                        <button onclick="verifyProviderDirectly('${provider.id}', '${key.id}', this)" style="padding: 2px 8px; font-size: 11px;">验证</button>
+                                        <button onclick="state.editing['${cacheKey}'] = true; renderProviderCards();" style="padding: 2px 8px; font-size: 11px;">编辑</button>
+                                        <button class="remove" onclick="removeProviderKey('${provider.id}', '${key.id}')" style="padding: 2px 8px; font-size: 11px;">清除</button>
                                     </div>
                                 </div>
-                            `}
+                            `;
+                        }
+                    }
+                } else {
+                    html += `
+                        <div style="font-size: 12px; color: var(--muted); padding: 8px;">暂无 API Key 配置</div>
+                    `;
+                }
+
+                html += `
                         </div>
                     </div>
                 `;
             }
 
             if (customModels && customModels.length > 0) {
-                html += `
-                    <div class="keys-provider-group">
-                        <div class="keys-provider-header">
-                            <div class="keys-provider-info">
-                                <span class="keys-provider-name" style="margin-left: 4px;">自定义 (OpenAI 兼容)</span>
-                            </div>
-                            <span class="keys-provider-count">${customModels.length} 钥匙</span>
-                        </div>
-                        <div class="keys-provider-keys-container">
-                `;
-                
+                // Group custom models by display_name
+                const customGroups = {};
                 for (const custom of customModels) {
-                    const isEditing = Boolean(state.editing[custom.id]);
-                    const isEnabled = custom.enabled !== false;
-                    const statusDotClass = isEnabled ? 'keys-status-dot healthy' : 'keys-status-dot';
-                    
-                    if (isEditing) {
-                        html += `
-                            <div class="keys-key-row" style="gap: 8px; width: 100%;">
-                                <input type="password" class="field" id="keys-edit-custom-input-${custom.id}" placeholder="输入新的 API Key" autocomplete="off" style="flex: 1; font-size: 12px; padding: 6px 10px;">
-                                <button class="btn btn-primary" onclick="saveEditedCustomKey('${custom.id}', this)" style="padding: 4px 10px; font-size: 11px; border-radius: 6px;">保存</button>
-                                <button class="btn btn-ghost" onclick="cancelEditCustomKey('${custom.id}')" style="padding: 4px 10px; font-size: 11px; border-radius: 6px;">取消</button>
-                            </div>
-                        `;
-                    } else {
-                        html += `
-                            <div class="keys-key-row">
-                                <label class="keys-switch" style="margin-right: 8px;">
-                                    <input type="checkbox" ${isEnabled ? 'checked' : ''} onchange="toggleProviderEnabled('${custom.id}', this.checked)">
-                                    <span class="keys-slider"></span>
-                                </label>
-                                <span class="${statusDotClass}"></span>
-                                <span class="keys-key-masked">${maskCustomKey(custom.api_key)}</span>
-                                <span class="keys-key-label" style="font-size: 12px; font-weight: 500;">${escapeHtml(custom.display_name || custom.model)}</span>
-                                <span class="keys-key-status-text" style="font-size: 11px; opacity: 0.8; font-family: monospace;">${escapeHtml(custom.base_url)}</span>
-                                <div class="keys-key-actions">
-                                    <button onclick="editCustomModelKey('${custom.id}')">编辑</button>
-                                    <button class="remove" onclick="removeCustomModel('${custom.id}')">清除</button>
-                                </div>
-                            </div>
-                        `;
+                    const name = (custom.display_name || '自定义').trim();
+                    if (!customGroups[name]) {
+                        customGroups[name] = [];
                     }
+                    customGroups[name].push(custom);
                 }
-                html += `
+
+                for (const [groupName, groupItems] of Object.entries(customGroups)) {
+                    const isGroupEnabled = groupItems.some(item => item.enabled !== false);
+                    const isAllVerified = groupItems.every(item => item.verified === true);
+                    const groupDotClass = !isGroupEnabled ? 'keys-status-dot' : (isAllVerified ? 'keys-status-dot healthy' : 'keys-status-dot warning');
+                    
+                    if (!state.collapsedCustomGroups) {
+                        state.collapsedCustomGroups = {};
+                    }
+                    const isCollapsed = Boolean(state.collapsedCustomGroups[groupName]);
+                    const caretRotation = isCollapsed ? '' : 'transform: rotate(90deg);';
+                    const containerDisplay = isCollapsed ? 'display: none;' : '';
+                    
+                    html += `
+                        <div class="keys-provider-group" id="keys-group-custom-${escapeHtml(groupName)}">
+                            <div class="keys-provider-header" style="cursor: pointer; user-select: none;" onclick="toggleCustomGroupCollapse('${escapeHtml(groupName)}')">
+                                <div class="keys-provider-info" style="display: flex; align-items: center; gap: 8px;">
+                                    <span class="keys-caret" style="display: inline-flex; align-items: center; transition: transform 0.2s; ${caretRotation}">
+                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                                    </span>
+                                    <span class="${groupDotClass}"></span>
+                                    <span class="keys-provider-name" style="margin-left: 4px;">自定义 - ${escapeHtml(groupName)}</span>
+                                </div>
+                                <span class="keys-provider-count">${groupItems.length} 账号</span>
+                            </div>
+                            <div class="keys-provider-keys-container" style="${containerDisplay}">
+                    `;
+                    
+                    for (const custom of groupItems) {
+                        const isEditing = Boolean(state.editing[custom.id]);
+                        const isEnabled = custom.enabled !== false;
+                        const customModelCount = Array.isArray(custom.models) ? custom.models.length : (custom.model ? 1 : 0);
+                        const isVerified = custom.verified === true;
+                        const statusDotClass = !isEnabled ? 'keys-status-dot' : (isVerified ? 'keys-status-dot healthy' : 'keys-status-dot warning');
+                        const customStatusText = isVerified ? `${customModelCount} models` : (custom.verify_error ? 'verify failed' : 'not verified');
+                        
+                        if (isEditing) {
+                            html += `
+                                <div class="keys-key-row" style="gap: 8px; width: 100%;">
+                                    <input type="password" class="field" id="keys-edit-custom-input-${custom.id}" placeholder="输入新的 API Key" autocomplete="off" style="flex: 1; font-size: 12px; padding: 6px 10px;">
+                                    <button class="btn btn-primary" onclick="saveEditedCustomKey('${custom.id}', this)" style="padding: 4px 10px; font-size: 11px; border-radius: 6px;">保存</button>
+                                    <button class="btn btn-ghost" onclick="cancelEditCustomKey('${custom.id}')" style="padding: 4px 10px; font-size: 11px; border-radius: 6px;">取消</button>
+                                </div>
+                            `;
+                        } else {
+                            html += `
+                                <div class="keys-key-row">
+                                    <label class="keys-switch" style="margin-right: 8px;">
+                                        <input type="checkbox" ${isEnabled ? 'checked' : ''} onchange="toggleProviderEnabled('${custom.id}', this.checked)">
+                                        <span class="keys-slider"></span>
+                                    </label>
+                                    <span class="${statusDotClass}"></span>
+                                    <span class="keys-key-masked">${maskCustomKey(custom.api_key)}</span>
+                                    <span class="keys-key-status-text" style="font-size: 11px; opacity: 0.8; font-family: monospace;">${escapeHtml(customStatusText)} · ${escapeHtml(custom.base_url)}</span>
+                                    <div class="keys-key-actions">
+                                        <button onclick="verifyCustomModel('${custom.id}', this)">验证</button>
+                                        <button onclick="editCustomModelKey('${custom.id}')">编辑</button>
+                                        <button class="remove" onclick="removeCustomModel('${custom.id}')">清除</button>
+                                    </div>
+                                </div>
+                            `;
+                        }
+                    }
+                    html += `
+                            </div>
                         </div>
-                    </div>
-                `;
+                    `;
+                }
             }
 
             if (html === '') {
@@ -2420,7 +2543,7 @@
                 ]);
                 state.statuses = statuses;
                 allProviderStatuses = statuses;
-                customModels = custom || [];
+                customModels = Array.isArray(custom) ? custom : (custom && Array.isArray(custom.models) ? custom.models : []);
             } catch (err) {
                 console.error("Failed to load statuses", err);
             }
@@ -2449,6 +2572,8 @@
         window.handleAddProviderKeySubmit = async function() {
             const platform = document.getElementById('keys-platform-select').value;
             const apiKey = document.getElementById('keys-api-key-input').value.trim();
+            const labelInput = document.getElementById('keys-label-input');
+            const label = labelInput ? labelInput.value.trim() : '';
             if (!platform) {
                 showToast('请选择平台', 'error');
                 return;
@@ -2461,10 +2586,10 @@
                 await requestJson(`/api/provider-keys/${platform}`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ api_key: apiKey }),
+                    body: JSON.stringify({ api_key: apiKey, label: label }),
                 });
                 document.getElementById('keys-api-key-input').value = '';
-                document.getElementById('keys-label-input').value = '';
+                if (labelInput) labelInput.value = '';
                 showToast('API Key 已成功添加', 'success');
                 await loadStatuses();
                 await ensureVisibleModels(true);
@@ -2478,12 +2603,12 @@
             const model = document.getElementById('keys-custom-model').value.trim();
             const displayName = document.getElementById('keys-custom-name').value.trim();
             const apiKey = document.getElementById('keys-custom-key').value.trim();
-            if (!baseUrl || !model) {
-                showToast('请输入基本 URL 和模型名称', 'error');
+            if (!baseUrl) {
+                showToast('请输入基本 URL', 'error');
                 return;
             }
             try {
-                await requestJson('/api/custom-models', {
+                const result = await requestJson('/api/custom-models', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ base_url: baseUrl, model: model, display_name: displayName, api_key: apiKey })
@@ -2491,7 +2616,7 @@
                 document.getElementById('keys-custom-model').value = '';
                 document.getElementById('keys-custom-name').value = '';
                 document.getElementById('keys-custom-key').value = '';
-                showToast('自定义模型已添加', 'success');
+                showToast('供应商已添加，请点击验证', 'success');
                 await loadStatuses();
                 await ensureVisibleModels(true);
             } catch (err) {
@@ -2501,32 +2626,53 @@
 
         window.editProviderKey = function(id) { state.editing[id] = true; renderProviderCards(); };
         window.cancelEditProviderKey = function(id) { state.editing[id] = false; renderProviderCards(); };
-        window.saveEditedProviderKey = async function(id, btn) {
-            const input = document.getElementById(`keys-edit-input-${id}`);
+        window.saveEditedProviderKey = async function(providerId, keyId, btn) {
+            const input = document.getElementById(`keys-edit-input-${providerId}-${keyId}`);
             const apiKey = (input && input.value || '').trim();
+            const labelInput = document.getElementById(`keys-edit-label-${providerId}-${keyId}`);
+            const label = labelInput ? labelInput.value.trim() : '';
             if (!apiKey) { showToast('请输入 API Key', 'error'); return; }
             btn.disabled = true;
             try {
-                await requestJson(`/api/provider-keys/${id}`, {
+                await requestJson(`/api/provider-keys/${providerId}/${keyId}`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ api_key: apiKey }),
+                    body: JSON.stringify({ api_key: apiKey, label: label }),
                 });
-                state.editing[id] = false;
+                state.editing[providerId + '_' + keyId] = false;
                 showToast('API Key 已更新', 'success');
                 await loadStatuses();
                 await ensureVisibleModels(true);
             } catch (err) { showToast(err.message || '修改失败', 'error'); }
             finally { btn.disabled = false; }
         };
-        window.removeProviderKey = async function(id) {
-            if (!confirm(`确定要清除 ${id} 的 Key 吗？`)) return;
+        window.removeProviderKey = async function(providerId, keyId) {
+            if (!confirm(`确定要清除该账号吗？`)) return;
             try {
-                await requestJson(`/api/provider-keys/${id}`, { method: 'DELETE' });
-                showToast('已清除 Key', 'success');
+                await requestJson(`/api/provider-keys/${providerId}/${keyId}`, { method: 'DELETE' });
+                const status = state.statuses[providerId];
+                if (status && status.keys && status.keys.length <= 1) {
+                    clearSelectionForProvider(providerId);
+                }
+                showToast('已清除账号', 'success');
                 await loadStatuses();
                 await ensureVisibleModels(true);
             } catch (err) { showToast(err.message || '清除失败', 'error'); }
+        };
+
+        window.verifyCustomModel = async function(id, btn) {
+            if (btn) { btn.disabled = true; btn.textContent = '验证中...'; }
+            try {
+                const result = await requestJson(`/api/custom-models/${id}/verify`, { method: 'POST' });
+                showToast('供应商已添加，请点击验证', 'success');
+                await loadStatuses();
+                await ensureVisibleModels(true);
+            } catch (err) {
+                showToast(err.message || '验证失败', 'error');
+                await loadStatuses();
+            } finally {
+                if (btn) { btn.disabled = false; btn.textContent = '验证'; }
+            }
         };
 
         window.editCustomModelKey = function(id) { state.editing[id] = true; renderProviderCards(); };
@@ -2551,9 +2697,96 @@
             if (!confirm('确定要删除该自定义模型吗？')) return;
             try {
                 await requestJson(`/api/custom-models/${id}`, { method: 'DELETE' });
+                clearSelectionForProvider(id);
                 showToast('已删除自定义模型', 'success');
                 await loadStatuses();
+                await ensureVisibleModels(true);
             } catch (err) { showToast(err.message || '删除失败', 'error'); }
+        };
+
+        window.startAccountProviderLogin = async function(providerId, btn) {
+            const originText = btn ? btn.textContent : '';
+            if (btn) { btn.disabled = true; btn.textContent = '登录中...'; }
+            try {
+                const data = await requestJson(`/api/account-providers/${providerId}/login/start`);
+                if (!data.verification_url || !data.state) {
+                    throw new Error('登录链接生成失败');
+                }
+                window.open(data.verification_url, '_blank', 'noopener,noreferrer');
+                showToast('已打开登录页面，授权后自动检测', 'success');
+                const started = Date.now();
+                const poll = async () => {
+                    if (Date.now() - started > 5 * 60 * 1000) {
+                        throw new Error('登录超时');
+                    }
+                    const result = await requestJson(`/api/account-providers/${providerId}/login/poll?state=${encodeURIComponent(data.state)}`);
+                    if (result.status === 'ok') return result;
+                    await new Promise(resolve => setTimeout(resolve, 2000));
+                    return poll();
+                };
+                await poll();
+                showToast(`${accountProviderName(providerId)} 登录成功`, 'success');
+                await loadStatuses();
+                await ensureVisibleModels(true);
+            } catch (err) {
+                showToast(err.message || '登录失败', 'error');
+            } finally {
+                if (btn) { btn.disabled = false; btn.textContent = originText; }
+            }
+        };
+
+        window.validateAccountProvider = async function(providerId, btn) {
+            const originText = btn ? btn.textContent : '';
+            if (btn) { btn.disabled = true; btn.textContent = '验证中...'; }
+            try {
+                const data = await requestJson(`/api/account-providers/${providerId}/validate`, { method: 'POST' });
+                showToast(data.ok ? `${providerId} 验证成功：${(data.models || []).length} 个模型` : (data.error || `${providerId} 验证失败`), data.ok ? 'success' : 'error');
+                await loadStatuses();
+                if (data.ok) {
+                    await ensureVisibleModels(true);
+                    const modelsTab = document.querySelector('a[href="#models"]');
+                    if (modelsTab) modelsTab.click();
+                }
+            } catch (err) {
+                showToast(err.message || '验证失败', 'error');
+            } finally {
+                if (btn) { btn.disabled = false; btn.textContent = originText; }
+            }
+        };
+
+        window.probeAccountProviderModels = async function(providerId, btn) {
+            const originText = btn ? btn.textContent : '';
+            if (btn) { btn.disabled = true; btn.textContent = '测速中...'; }
+            try {
+                const data = await requestJson(`/api/account-providers/${providerId}/probe-models`, { method: 'POST' });
+                showToast(data.ok ? `${providerId} 测速完成：成功 ${data.success_count || 0}` : (data.error || `${providerId} 测速失败`), data.ok ? 'success' : 'error');
+                await loadStatuses();
+                await ensureVisibleModels(true);
+            } catch (err) {
+                showToast(err.message || '测速失败', 'error');
+            } finally {
+                if (btn) { btn.disabled = false; btn.textContent = originText; }
+            }
+        };
+
+        window.removeAccountProviderAccount = async function(providerId, accountId) {
+            if (!confirm('确定删除该账号吗？')) return;
+            try {
+                await requestJson(`/api/account-providers/${providerId}/accounts/${accountId}`, { method: 'DELETE' });
+                showToast('账号已删除', 'success');
+                await loadStatuses();
+                await ensureVisibleModels(true);
+            } catch (err) {
+                showToast(err.message || '删除失败', 'error');
+            }
+        };
+
+        window.toggleCustomGroupCollapse = function(groupName) {
+            if (!state.collapsedCustomGroups) {
+                state.collapsedCustomGroups = {};
+            }
+            state.collapsedCustomGroups[groupName] = !state.collapsedCustomGroups[groupName];
+            renderProviderCards();
         };
 
         window.toggleProviderEnabled = async function(id, checked) {
@@ -2571,19 +2804,20 @@
             }
         };
 
-        window.verifyProviderDirectly = async function(id, btn) {
+        window.verifyProviderDirectly = async function(providerId, keyId, btn) {
             btn.disabled = true;
             const originText = btn.textContent;
             btn.textContent = '验证中...';
+            const cacheKey = providerId + '_' + keyId;
             try {
-                const data = await requestJson(`/api/provider-keys/${id}/verify`, { method: 'POST' });
-                state.verifyResults[id] = data;
-                showToast(`${id} 验证成功`, 'success');
+                const data = await requestJson(`/api/provider-keys/${providerId}/${keyId}/verify`, { method: 'POST' });
+                state.verifyResults[cacheKey] = data;
+                showToast(`${providerId} 验证成功`, 'success');
                 await loadStatuses();
                 await ensureVisibleModels(true);
             } catch (error) {
-                state.verifyResults[id] = error.payload || {};
-                showToast(`${id} 验证失败`, 'error');
+                state.verifyResults[cacheKey] = error.payload || {};
+                showToast(`${providerId} 验证失败`, 'error');
                 await loadStatuses();
             } finally {
                 btn.disabled = false;
@@ -2597,13 +2831,19 @@
                 showToast('未配置任何提供商', 'error');
                 return;
             }
-            showToast('开始验证所有提供商...', 'info');
+            showToast('开始验证所有提供商的所有账号...', 'info');
             for (const p of configured) {
-                try {
-                    const data = await requestJson(`/api/provider-keys/${p.id}/verify`, { method: 'POST' });
-                    state.verifyResults[p.id] = data;
-                } catch (error) {
-                    state.verifyResults[p.id] = error.payload || { ok: false, error: error.message };
+                const status = state.statuses[p.id];
+                if (status && status.keys) {
+                    for (const k of status.keys) {
+                        const cacheKey = p.id + '_' + k.id;
+                        try {
+                            const data = await requestJson(`/api/provider-keys/${p.id}/${k.id}/verify`, { method: 'POST' });
+                            state.verifyResults[cacheKey] = data;
+                        } catch (error) {
+                            state.verifyResults[cacheKey] = error.payload || { ok: false, error: error.message };
+                        }
+                    }
                 }
             }
             showToast('所有提供商验证完成', 'success');
@@ -2909,6 +3149,7 @@
             const activePaneId = document.querySelector('.tab-pane.active')?.id;
             if (activePaneId === 'pane-models') {
                 setTimeout(() => fetchModelsStats(), 0);
+                startRuntimeModelStatusPolling();
             } else if (activePaneId === 'pane-analysis') {
                 setTimeout(() => fetchDetailedAnalytics(), 0);
             }
@@ -2926,6 +3167,7 @@
 
         let localModelsOrder = null;
         let currentStrategy = 'priority';
+        let runtimeStatusTimer = null;
         let allProviderStatuses = {};
 
         const platformColors = {
@@ -2948,65 +3190,7 @@
             opencode:    '#2563eb'
         };
 
-        const STRATEGIES = {
-            'priority': {
-                label: '手动',
-                blurb: '手动模式：请求按以下顺序排列，从上到下。拖动即可重新排序。',
-                weights: null
-            },
-            'balanced': {
-                label: '均衡',
-                blurb: '均衡模式：可靠性主导 (50%)，速度与智力平分秋色 (各占 25%)。通用默认推荐。',
-                weights: { reliability: 0.5, speed: 0.25, intelligence: 0.25 }
-            },
-            'smartest': {
-                label: '最聪明的',
-                blurb: '最聪明模式：优先选用最聪明的可用模型。智力占 55%，可靠性占 35%，速度占 10%。',
-                weights: { reliability: 0.35, speed: 0.1, intelligence: 0.55 }
-            },
-            'fastest': {
-                label: '最快',
-                blurb: '最快模式：优先选用响应最快的可用模型。速度占 55%，可靠性占 35%，智力占 10%。',
-                weights: { reliability: 0.35, speed: 0.55, intelligence: 0.1 }
-            },
-            'reliable': {
-                label: '最可靠',
-                blurb: '最可靠模式：最大限度保障成功率。可靠性占 70%，速度与智力各占 15%。',
-                weights: { reliability: 0.7, speed: 0.15, intelligence: 0.15 }
-            }
-        };
 
-        window.setStrategy = function(strat) {
-            currentStrategy = strat;
-            localModelsOrder = null;
-            document.getElementById('floatingSaveBar').style.display = 'none';
-
-            document.querySelectorAll('.strategy-btn').forEach(btn => {
-                if (btn.id.startsWith('strat-')) {
-                    btn.classList.remove('active');
-                }
-            });
-            const activeBtn = document.getElementById(`strat-${strat}`);
-            if (activeBtn) {
-                activeBtn.classList.add('active');
-            }
-
-            const info = STRATEGIES[strat];
-            const weightsSpan = document.getElementById('strategyWeights');
-            const blurbP = document.getElementById('strategyBlurb');
-            if (blurbP) {
-                blurbP.textContent = info.blurb;
-            }
-            if (weightsSpan) {
-                if (info.weights) {
-                    weightsSpan.textContent = `可靠性 ${Math.round(info.weights.reliability * 100)}% · 速度 ${Math.round(info.weights.speed * 100)}% · 智力 ${Math.round(info.weights.intelligence * 100)}%`;
-                } else {
-                    weightsSpan.textContent = '';
-                }
-            }
-
-            renderModelsStatsTable();
-        };
 
         window.runSpeedTest = async function() {
             const btn = document.getElementById('speedTestBtn');
@@ -3014,7 +3198,7 @@
             const batchSize = 12;
             const concurrencyLimit = 4;
             const batchDelayMs = 800;
-            const requestTimeoutMs = 10000;
+            const requestTimeoutMs = 12000;
             const sleep = (ms) => new Promise((resolve) => window.setTimeout(resolve, ms));
             const resetButton = () => {
                 btn.disabled = false;
@@ -3042,14 +3226,14 @@
                 测速中...
             `;
 
-            const testableModels = currentModelsOrder.filter((item) => !isProbeCacheFresh(item));
-            const skipped = currentModelsOrder.filter((item) => isProbeCacheFresh(item)).length;
+            const testableModels = currentModelsOrder.filter((item) => item.probe_status === 'untested');
+            const skipped = currentModelsOrder.length - testableModels.length;
             if (testableModels.length === 0) {
-                showToast(skipped ? '最近已测速，无需重复测试' : '无可用模型进行测速', skipped ? 'success' : 'warning');
+                showToast('没有待测速模型', 'success');
                 resetButton();
                 return;
             }
-            showToast(`开始测速 ${testableModels.length} 个模型，跳过 ${skipped} 个已缓存结果`, 'info');
+            showToast(`开始测速待测速模型 ${testableModels.length} 个`, 'info');
 
             const results = [];
             const batches = [];
@@ -3103,7 +3287,6 @@
                         if (res.success) successCount += 1;
                         else failedCount += 1;
                         setProgress(completed, testableModels.length, batchIndex, batches.length, successCount, failedCount, skipped);
-                        renderModelsStatsTable();
                     }
                 }
                 const workers = Array.from({ length: Math.min(concurrencyLimit, batch.length) }, batchWorker);
@@ -3123,36 +3306,13 @@
                 showToast('测速中断，请稍后重试', 'error');
             }
 
-            const ordered = [...currentModelsOrder].sort((a, b) => {
-                const rank = (item) => item.probe_status === 'success' ? 0 : item.probe_status === 'untested' ? 1 : 2;
-                const rankDiff = rank(a) - rank(b);
-                if (rankDiff !== 0) return rankDiff;
-                const leftLatency = Number.isFinite(a.latency_ms) ? a.latency_ms : 999999;
-                const rightLatency = Number.isFinite(b.latency_ms) ? b.latency_ms : 999999;
-                return leftLatency - rightLatency;
-            });
 
-            try {
-                const orderStrings = ordered.map(i => `${i.provider}/${i.model}`);
-                await fetch('/api/manual-order', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ order: orderStrings })
-                });
-                showToast(`测速完成：成功 ${successCount}，未通过 ${failedCount}，跳过 ${skipped}`);
-            } catch (err) {
-                console.error(err);
-                showToast('排序保存失败', 'error');
-            }
+            showToast(`Speed test done: success ${successCount}, failed ${failedCount}, skipped ${skipped}`);
 
             currentStrategy = 'priority';
-            document.querySelectorAll('.strategy-btn').forEach(tab => {
-                if (tab.id === 'strat-priority') tab.classList.add('active');
-                else if (tab.id.startsWith('strat-')) tab.classList.remove('active');
-            });
             const blurbP = document.getElementById('strategyBlurb');
             if (blurbP) {
-                blurbP.textContent = '手动模式：请求按以下顺序排列，从上到下。拖动即可重新排序。';
+                blurbP.textContent = '测速只过滤不可用模型；调用顺序按智力、速度、可靠性排序。';
             }
 
             localModelsOrder = null;
@@ -3237,8 +3397,8 @@
             if (!dragSrcKey || dragSrcKey === targetKey) return;
             
             const baseList = localModelsOrder ? [...localModelsOrder] : [...currentModelsOrder];
-            const visibleList = baseList.filter((item) => item.probe_status === 'success');
-            const hiddenList = baseList.filter((item) => item.probe_status !== 'success');
+            const visibleList = baseList.filter((item) => item.probe_status === 'success' && item.analysis_status !== 'hidden');
+            const hiddenList = baseList.filter((item) => item.probe_status !== 'success' || item.analysis_status === 'hidden');
             const sourceIndex = visibleList.findIndex((item) => encodeURIComponent(`${item.provider}/${item.model}`) === dragSrcKey);
             const targetIndex = visibleList.findIndex((item) => encodeURIComponent(`${item.provider}/${item.model}`) === targetKey);
             if (sourceIndex < 0 || targetIndex < 0) return;
@@ -3287,6 +3447,7 @@
                 const data = await res.json();
                 if (!data || !data.models) return;
                 currentModelsOrder = data.models;
+                updatePendingProbeCount();
                 renderModelsStatsTable();
                 renderPlaygroundModels();
             } catch (err) {
@@ -3295,16 +3456,58 @@
         }
 
         function calculateScore(item, strategyKey) {
-            if (strategyKey === 'priority') return 0;
-            const weights = STRATEGIES[strategyKey].weights;
-            if (!weights) return 0;
-            const rel = (item.rel || 0) / 100;
-            const spd = (item.spd || 0) / 100;
-            const intel = (item.int || 0) / 100;
-            const headroom = item.headroom !== undefined ? item.headroom : 1.0;
-            
-            const base = (weights.reliability * rel + weights.speed * spd + weights.intelligence * intel);
-            return base * headroom;
+            if (strategyKey === 'priority') return item.score || 0;
+            return item.score || 0;
+        }
+
+        function updatePendingProbeCount() {
+            const el = document.getElementById('pendingProbeCount');
+            if (!el) return;
+            const count = currentModelsOrder.filter((item) => item.probe_status === 'untested').length;
+            el.textContent = `待测速 ${count}`;
+        }
+
+        function formatRuntimeSeconds(startedAt) {
+            const ts = Number(startedAt || 0);
+            if (!ts) return '';
+            const seconds = Math.max(0, (Date.now() / 1000) - ts);
+            return seconds < 10 ? seconds.toFixed(1) : String(Math.round(seconds));
+        }
+
+        function updateRuntimeModelStatus(data) {
+            const el = document.getElementById('runtimeModelStatus');
+            if (!el) return;
+            const dotColor = data && data.active ? '#22c55e' : data && data.last_status === 'failed' ? '#ef4444' : '#9ca3af';
+            let text = '当前调用：空闲';
+            if (data && data.active && data.full_model) {
+                const elapsed = formatRuntimeSeconds(data.started_at);
+                text = `当前调用：${data.full_model} · 调用中${elapsed ? ` · 已用 ${elapsed}s` : ''}`;
+            } else if (data && data.last_full_model) {
+                const latency = Number.isFinite(data.last_latency_ms) ? ` · ${data.last_latency_ms}ms` : '';
+                const statusText = data.last_status === 'success' ? '成功' : '失败';
+                text = `最近调用：${data.last_full_model} · ${statusText}${latency}`;
+                if (data.last_success_full_model && data.last_status !== 'success') {
+                    const successLatency = Number.isFinite(data.last_success_latency_ms) ? ` · ${data.last_success_latency_ms}ms` : '';
+                    text += `；最近成功：${data.last_success_full_model}${successLatency}`;
+                }
+            }
+            el.innerHTML = `<span style="width: 7px; height: 7px; border-radius: 50%; background: ${dotColor}; display: inline-block;"></span><span>${escapeHtml(text)}</span>`;
+        }
+
+        async function fetchRuntimeModelStatus() {
+            try {
+                const res = await fetch('/api/runtime/current-model', { cache: 'no-store' });
+                if (!res.ok) return;
+                updateRuntimeModelStatus(await res.json());
+            } catch (err) {
+                console.debug('runtime model status skipped', err);
+            }
+        }
+
+        function startRuntimeModelStatusPolling() {
+            fetchRuntimeModelStatus();
+            if (runtimeStatusTimer) return;
+            runtimeStatusTimer = window.setInterval(fetchRuntimeModelStatus, 1000);
         }
 
         function getTokensValue(budgetStr) {
@@ -3350,7 +3553,7 @@
                 const val = getTokensValue(item.monthly_token_budget);
                 totalBudgetVal += val;
                 return {
-                    name: item.model,
+                    name: modelKeyLabel(item),
                     provider: item.provider,
                     budget: val
                 };
@@ -3413,6 +3616,26 @@
             return '未测';
         }
 
+        function providerLabel(item) {
+            return item && item.provider_display ? item.provider_display : (item && item.provider ? item.provider : '');
+        }
+
+        function modelKeyLabel(item) {
+            return item && item.model_key_display ? item.model_key_display : (item && item.model ? item.model : '');
+        }
+
+        function modelNameLabel(item) {
+            return item && item.model_display ? item.model_display : '';
+        }
+
+        function primaryModelLabel(item) {
+            return modelNameLabel(item) || modelKeyLabel(item);
+        }
+
+        function secondaryModelLabel(item) {
+            return modelNameLabel(item) ? modelKeyLabel(item) : '';
+        }
+
         function probeRank(item) {
             if (item.probe_status === 'success') return 0;
             if (item.probe_status === 'untested') return 1;
@@ -3429,16 +3652,71 @@
             renderModelsStatsTable();
         };
 
+        function renderPendingProbeSection(untestedModels) {
+            const section = document.getElementById('pendingProbeSection');
+            if (!section) return;
+            if (!untestedModels.length) {
+                section.innerHTML = '';
+                return;
+            }
+            section.innerHTML = `
+                <div style="border: 1px solid var(--line); border-radius: 20px; background: #fff; overflow: hidden;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 14px 16px; background: #fafafa; border-bottom: 1px solid var(--line);">
+                        <div>
+                            <div style="font-size: 13px; font-weight: 700; color: var(--text);">未测试模型 ${untestedModels.length} 个</div>
+                            <div style="font-size: 12px; color: var(--muted); margin-top: 3px;">新模型先在这里测速，通过后进入主调用列表。</div>
+                        </div>
+                        <button id="speedTestBtn" onclick="runSpeedTest()" style="padding: 7px 16px; border-radius: 9999px; background: linear-gradient(135deg, #3b82f6, #2563eb); color: #fff; border: none; font-size: 12px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; box-shadow: 0 4px 12px rgba(37,99,235,0.2); white-space: nowrap;">
+                            <svg style="width: 14px; height: 14px;" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+                            一键测速
+                        </button>
+                    </div>
+                    ${`
+                        <div style="overflow-x: auto;">
+                            <table style="width: 100%; border-collapse: collapse; font-size: 12px;">
+                                <tbody>
+                                    ${untestedModels.map((item) => `
+                                        <tr style="border-bottom: 1px solid var(--line);">
+                                            <td style="padding: 10px 12px; font-weight: 600;">
+                                                <div>${escapeHtml(primaryModelLabel(item))}</div>
+                                                ${secondaryModelLabel(item) ? `<div style="font-size: 11px; color: var(--muted); font-weight: 400; margin-top: 2px;">${escapeHtml(secondaryModelLabel(item))}</div>` : ''}
+                                            </td>
+                                            <td style="padding: 10px 12px; color: var(--muted);">${escapeHtml(providerLabel(item))}</td>
+                                            <td style="padding: 10px 12px; color: var(--muted); text-align: right;">等待测速</td>
+                                        </tr>
+                                    `).join('')}
+                                </tbody>
+                            </table>
+                        </div>
+                    `}
+                </div>
+            `;
+        };
+
+        window.toggleAnalysisHiddenModels = function() {
+            showAnalysisHiddenModels = !showAnalysisHiddenModels;
+            renderModelsStatsTable();
+        };
+
         function renderHiddenModelTable(items, { title, expanded, toggleFn, emptyText, reasonFallback }) {
             if (!items.length) return '';
-            const rows = items.map((item) => `
+            const rows = items.map((item) => {
+                const reason = item.hide_reason || item.probe_error || reasonFallback;
+                const usage = Number.isFinite(item.usage_count) && item.usage_count > 0
+                    ? ` · ${item.usage_count} 次 / 成功率 ${item.success_rate ?? '—'}%`
+                    : '';
+                return `
                 <tr style="border-bottom: 1px solid var(--line);">
-                    <td style="padding: 10px 12px; font-weight: 600;">${escapeHtml(item.model)}</td>
-                    <td style="padding: 10px 12px; color: var(--muted);">${escapeHtml(item.provider)}</td>
+                    <td style="padding: 10px 12px; font-weight: 600;">
+                        <div>${escapeHtml(primaryModelLabel(item))}</div>
+                        ${secondaryModelLabel(item) ? `<div style="font-size: 11px; color: var(--muted); font-weight: 400; margin-top: 2px;">${escapeHtml(secondaryModelLabel(item))}</div>` : ''}
+                    </td>
+                    <td style="padding: 10px 12px; color: var(--muted);">${escapeHtml(providerLabel(item))}</td>
                     <td style="padding: 10px 12px; text-align: right; font-family: monospace;">${Number.isFinite(item.latency_ms) ? `${Math.round(item.latency_ms)} ms` : '—'}</td>
-                    <td style="padding: 10px 12px; color: var(--muted);">${escapeHtml(item.probe_error || reasonFallback)}</td>
+                    <td style="padding: 10px 12px; color: var(--muted);">${escapeHtml(`${reason}${usage}`)}</td>
                 </tr>
-            `).join('');
+            `;
+            }).join('');
             return `
                 <div style="border: 1px solid var(--line); border-radius: 16px; background: #fff; overflow: hidden;">
                     <button onclick="${toggleFn}()" style="width: 100%; display: flex; justify-content: space-between; align-items: center; padding: 10px 14px; border: none; background: #fafafa; color: var(--text); cursor: pointer; font-size: 12px; font-weight: 600;">
@@ -3464,15 +3742,22 @@
             `;
         }
 
-        function renderHiddenModelsSection(failedModels, untestedModels) {
+        function renderHiddenModelsSection(failedModels, untestedModels, analysisHiddenModels = []) {
             const section = document.getElementById('failedModelsSection');
             if (!section) return;
-            if (!failedModels.length && !untestedModels.length) {
+            if (!failedModels.length && !untestedModels.length && !analysisHiddenModels.length) {
                 section.innerHTML = '';
                 return;
             }
             section.innerHTML = `
                 <div style="display: flex; flex-direction: column; gap: 10px;">
+                    ${renderHiddenModelTable(analysisHiddenModels, {
+                        title: '分析隐藏模型',
+                        expanded: showAnalysisHiddenModels,
+                        toggleFn: 'toggleAnalysisHiddenModels',
+                        emptyText: '暂无分析隐藏模型',
+                        reasonFallback: '根据真实调用数据隐藏'
+                    })}
                     ${renderHiddenModelTable(untestedModels, {
                         title: '未测速模型',
                         expanded: showUntestedModels,
@@ -3499,18 +3784,21 @@
             
             const activeList = localModelsOrder || currentModelsOrder;
             if (activeList.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="10" style="padding: 12px; text-align: center; color: var(--muted);">暂无模型排行数据</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="10" style="padding: 12px; text-align: center; color: var(--muted);">暂无模型排行数据</td></tr>'; 
+                renderPendingProbeSection([]);
                 renderHiddenModelsSection([], []);
                 return;
             }
             
             const failedModels = activeList.filter((item) => item.probe_status === 'failed');
+            const analysisHiddenModels = activeList.filter((item) => item.probe_status === 'success' && item.analysis_status === 'hidden');
             const untestedModels = activeList.filter((item) => item.probe_status !== 'success' && item.probe_status !== 'failed');
-            renderHiddenModelsSection(failedModels, untestedModels);
+            renderPendingProbeSection(untestedModels);
+            renderHiddenModelsSection(failedModels, [], analysisHiddenModels);
 
-            let displayList = activeList.filter((item) => item.probe_status === 'success');
+            let displayList = activeList.filter((item) => item.probe_status === 'success' && item.analysis_status !== 'hidden' && item.chat_candidate !== false);
             if (displayList.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="10" style="padding: 12px; text-align: center; color: var(--muted);">暂无通过测速的模型。点击“一键测速”，或展开下方未测速/未通过模型查看详情。</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="10" style="padding: 12px; text-align: center; color: var(--muted);">暂无可调用模型。点击“一键测速”，或展开下方隐藏/未测速/未通过模型查看详情。</td></tr>'; 
                 return;
             }
 
@@ -3519,14 +3807,6 @@
                     const scoreA = calculateScore(a, currentStrategy);
                     const scoreB = calculateScore(b, currentStrategy);
                     return scoreB - scoreA;
-                });
-            } else if (!localModelsOrder) {
-                displayList.sort((a, b) => {
-                    const rankDiff = probeRank(a) - probeRank(b);
-                    if (rankDiff !== 0) return rankDiff;
-                    const leftLatency = Number.isFinite(a.latency_ms) ? a.latency_ms : 999999;
-                    const rightLatency = Number.isFinite(b.latency_ms) ? b.latency_ms : 999999;
-                    return leftLatency - rightLatency;
                 });
             }
             
@@ -3573,8 +3853,9 @@
                         <!-- Model -->
                         <td style="padding: 12px; vertical-align: middle;">
                             <div style="display: flex; align-items: center; gap: 4px; flex-wrap: wrap;">
-                                <span style="font-weight: 600; font-size: 14px; color: var(--text);">${escapeHtml(item.model)}</span>
-                                <span style="font-size: 11px; color: var(--muted); background: #f0f2f0; padding: 1px 5px; border-radius: 4px;">${escapeHtml(item.provider)}</span>
+                                <span style="font-weight: 600; font-size: 14px; color: var(--text);">${escapeHtml(primaryModelLabel(item))}</span>
+                                <span style="font-size: 11px; color: var(--muted); background: #f0f2f0; padding: 1px 5px; border-radius: 4px;">${escapeHtml(providerLabel(item))}</span>
+                                ${secondaryModelLabel(item) ? `<span style="flex-basis: 100%; font-size: 12px; color: var(--muted);">${escapeHtml(secondaryModelLabel(item))}</span>` : ''}
                                 ${supportsVision ? '<span class="badge-tag tag-vision">想象</span>' : ''}
                                 ${supportsTools ? '<span class="badge-tag tag-tools">工具</span>' : ''}
                                 ${item.observations > 0 ? `<span class="badge-tag tag-obs">${item.observations}次观察</span>` : ''}
@@ -3649,7 +3930,7 @@
             showToast('初始化失败', 'error');
         });
 
-        let activeRange = '7d';
+        let activeRange = 'today';
         let chartsInstance = {};
         let chartJsPromise = null;
         const analyticsCache = {};
@@ -3673,13 +3954,13 @@
             return chartJsPromise;
         }
 
-        async function fetchCachedAnalytics(name) {
-            const key = `${activeRange}:${name}`;
+        async function fetchCachedAnalytics(name, range = activeRange) {
+            const key = `${range}:${name}`;
             const cached = analyticsCache[key];
             if (cached && Date.now() - cached.ts < ANALYTICS_CACHE_TTL_MS) {
                 return cached.data;
             }
-            const response = await fetch(`/api/analytics/${name}?range=${activeRange}`);
+            const response = await fetch(`/api/analytics/${name}?range=${range}`);
             if (response.status === 401) {
                 showToast('请登录管理员账户', 'error');
                 window.location.href = '/login';
@@ -3717,7 +3998,9 @@
 
             const summaryRes = { status: 'fulfilled', value: dashboard.summary || {} };
             const platformRes = { status: 'fulfilled', value: dashboard.byPlatform || [] };
-            const timelineRes = { status: 'fulfilled', value: dashboard.timeline || [] };
+            const timelineRes = await fetchCachedAnalytics('timeline', '7d')
+                .then((value) => ({ status: 'fulfilled', value }))
+                .catch((reason) => ({ status: 'rejected', reason }));
             const errorDistRes = { status: 'fulfilled', value: dashboard.errorDistribution || { byPlatform: [] } };
             const errorsRes = { status: 'fulfilled', value: dashboard.errors || [] };
             const modelRes = { status: 'fulfilled', value: dashboard.byModel || [] };
@@ -3925,6 +4208,7 @@
 
                 if (targetId === 'pane-models') {
                     fetchModelsStats();
+                    startRuntimeModelStatusPolling();
                 } else if (targetId === 'pane-analysis') {
                     fetchDetailedAnalytics();
                 }

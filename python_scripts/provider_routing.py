@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from typing import Literal
 
 from .provider_catalog import get_provider_model_hints
+from .scoring import route_priority_sort_key
 
 
 AliasName = Literal['auto']
@@ -129,7 +130,7 @@ def resolve_alias_candidates(
     return ordered
 
 
-def build_auto_candidates(*, requested_model: str | None, configured: list[str], health: HealthState, now_ts: int, ttl_seconds: int, manual_order: list[str] | None = None, disabled_models: list[str] | None = None, provider_models: dict[str, list[str]] | None = None) -> list[CandidateTarget]:
+def build_auto_candidates(*, requested_model: str | None, configured: list[str], health: HealthState, now_ts: int, ttl_seconds: int, manual_order: list[str] | None = None, disabled_models: list[str] | None = None, provider_models: dict[str, list[str]] | None = None, allowed_models: set[str] | None = None) -> list[CandidateTarget]:
     ordered: list[CandidateTarget] = []
     seen: set[tuple[str, str]] = set()
 
@@ -139,6 +140,8 @@ def build_auto_candidates(*, requested_model: str | None, configured: list[str],
             return
         if disabled_models and f"{provider}/{model}" in disabled_models:
             return
+        if source != 'user_requested' and allowed_models is not None and f"{provider}/{model}" not in allowed_models:
+            return
         seen.add(key)
         ordered.append(CandidateTarget(provider, model, source, len(ordered)))
 
@@ -146,30 +149,31 @@ def build_auto_candidates(*, requested_model: str | None, configured: list[str],
         provider_name, model_id = requested_model.split('/', 1)
         push(provider_name, model_id, 'user_requested')
     manual_order = manual_order or []
-    from .provider_catalog import get_model_capabilities
     
-    ranked: list[tuple[int, int, int, int, str, str]] = []
+    manual_rank = {key: index for index, key in enumerate(manual_order)}
+    ranked: list[tuple[int, float, float, float, int, str, str]] = []
     for provider_rank, provider_name in enumerate(configured):
         if provider_models and provider_name in provider_models:
             hints = provider_models[provider_name]
         else:
             hints = get_provider_model_hints(provider_name)
+        if allowed_models is not None:
+            allowed_hints = [
+                key.split('/', 1)[1]
+                for key in allowed_models
+                if key.startswith(f'{provider_name}/') and '/' in key
+            ]
+            hints = list(dict.fromkeys([*hints, *allowed_hints]))
         for model_id in hints:
             key = f'{provider_name}/{model_id}'
             
-            manual_score = 0
-            if key in manual_order:
-                manual_score = 1000000 - manual_order.index(key) * 100
-                
-            caps = get_model_capabilities(provider_name, model_id)
-            capability_score = int(caps.get('default_output_tokens', 0) or 0)
-            
-            entry = health.get(key)
-            health_score = _health_score(entry, now_ts, ttl_seconds) if isinstance(entry, dict) else 0
-            
-            ranked.append((manual_score, capability_score, health_score, -provider_rank, provider_name, model_id))
+            if allowed_models is not None and key not in allowed_models:
+                continue
+            intel, speed, reliability = route_priority_sort_key(provider_name, model_id, health.get(key))
+            manual_score = 1000000 - manual_rank[key] if key in manual_rank else 0
+            ranked.append((manual_score, intel, speed, reliability, -provider_rank, provider_name, model_id))
 
-    for _, _, _, _, provider_name, model_id in sorted(ranked, key=lambda item: (item[0], item[1], item[2], item[3]), reverse=True):
+    for _, _, _, _, _, provider_name, model_id in sorted(ranked, key=lambda item: (item[0], item[1], item[2], item[3], item[4]), reverse=True):
         push(provider_name, model_id, 'health_boosted' if isinstance(health.get(f'{provider_name}/{model_id}'), dict) else 'provider_default')
 
     return ordered

@@ -224,6 +224,55 @@ async def get_provider_keys():
     return svc.provider_key_statuses()
 
 
+@app.get('/api/account-providers', dependencies=[Depends(check_admin_auth)])
+async def get_account_providers():
+    return get_service().account_provider_statuses()
+
+
+@app.get('/api/account-providers/{provider}/login/start', dependencies=[Depends(check_admin_auth)])
+async def start_account_provider_login(provider: str):
+    try:
+        return await run_in_threadpool(get_service().start_account_provider_login, provider)
+    except ProviderError as exc:
+        return JSONResponse({'ok': False, 'error': str(exc)}, status_code=400)
+
+
+@app.get('/api/account-providers/{provider}/login/poll', dependencies=[Depends(check_admin_auth)])
+async def poll_account_provider_login(provider: str, state: str):
+    try:
+        return await run_in_threadpool(get_service().poll_account_provider_login, provider, state)
+    except ProviderError as exc:
+        return JSONResponse({'ok': False, 'error': str(exc)}, status_code=400)
+
+
+@app.get('/api/account-providers/{provider}/accounts', dependencies=[Depends(check_admin_auth)])
+async def get_account_provider_accounts(provider: str):
+    from .account_provider_store import public_account
+    return {
+        'ok': True,
+        'provider': provider,
+        'accounts': [public_account(account) for account in get_service().account_provider_accounts(provider)],
+    }
+
+
+@app.delete('/api/account-providers/{provider}/accounts/{account_id}', dependencies=[Depends(check_admin_auth)])
+async def delete_account_provider_account(provider: str, account_id: str):
+    try:
+        return await run_in_threadpool(get_service().delete_account_provider_account, provider, account_id)
+    except ProviderError as exc:
+        return JSONResponse({'ok': False, 'error': str(exc)}, status_code=400)
+
+
+@app.post('/api/account-providers/{provider}/validate', dependencies=[Depends(check_admin_auth)])
+async def validate_account_provider(provider: str):
+    return await run_in_threadpool(get_service().validate_account_provider, provider)
+
+
+@app.post('/api/account-providers/{provider}/probe-models', dependencies=[Depends(check_admin_auth)])
+async def probe_account_provider_models(provider: str):
+    return await run_in_threadpool(get_service().probe_account_provider_models, provider)
+
+
 @app.get('/api/preferred-model')
 async def get_preferred_model():
     svc = get_service()
@@ -245,6 +294,12 @@ async def get_usage_stats():
 async def get_models_stats():
     svc = get_service()
     return await run_in_threadpool(svc.models_stats)
+
+
+@app.get('/api/runtime/current-model')
+async def get_runtime_current_model():
+    return get_service().runtime_model_status()
+
 
 @app.get('/api/manual-order', dependencies=[Depends(check_admin_auth)])
 async def get_manual_order():
@@ -502,9 +557,11 @@ async def test_model(request: Request):
     start_time = time.time()
     try:
         import asyncio
+        probe_timeout = 45 if provider_name == 'qoder' else 3
+        wait_timeout = 60 if provider_name == 'qoder' else 6
         result = await asyncio.wait_for(
-            run_in_threadpool(svc.probe, provider_name, model_id, timeout=3),
-            timeout=6,
+            run_in_threadpool(svc.probe, provider_name, model_id, timeout=probe_timeout),
+            timeout=wait_timeout,
         )
         latency = int((time.time() - start_time) * 1000)
         if result.ok:
@@ -708,6 +765,37 @@ async def legacy_chat_completions(request: Request):
     }, status_code=400)
 
 
+@app.post('/qoder/v1/chat/completions')
+async def qoder_chat_completions(request: Request):
+    auth_res = await check_auth_openai(request)
+    if isinstance(auth_res, JSONResponse):
+        return auth_res
+    payload, error_response = await _read_json_payload(request, openai=True)
+    if error_response is not None:
+        return error_response
+    payload = dict(payload)
+    raw_model = str(payload.get('model') or 'auto')
+    model = raw_model.split('/', 1)[1] if raw_model.startswith('qoder/') else raw_model
+    payload['model'] = model or 'auto'
+    try:
+        adapter = get_service().provider_adapter('qoder')
+        result = await run_in_threadpool(adapter.forward_chat, payload)
+    except ProviderError as exc:
+        return JSONResponse({'error': {'message': str(exc), 'type': 'provider_error', 'param': None, 'code': None}}, status_code=400)
+    if result.stream is not None:
+        return StreamingResponse(
+            _iter_chunks(result.stream),
+            media_type='text/event-stream',
+            headers={'Cache-Control': 'no-cache', 'Connection': 'keep-alive', 'X-Accel-Buffering': 'no'},
+        )
+    if result.body is not None:
+        try:
+            return JSONResponse(content=json.loads(result.body), status_code=result.status or 200)
+        except Exception:
+            return JSONResponse(content={'error': {'message': 'qoder returned invalid json'}}, status_code=502)
+    return JSONResponse(content={'error': {'message': 'qoder returned empty response'}}, status_code=502)
+
+
 @app.post('/v1/chat/completions')
 async def openai_chat_completions(request: Request):
     # Need to read body manually for logging before auth
@@ -863,7 +951,17 @@ def to_sqlite_datetime(timestamp: float) -> str:
     return dt.strftime('%Y-%m-%d %H:%M:%S')
 
 def get_since_timestamp(range_str: str) -> str:
+    import datetime
     import time
+    if range_str in ('today', '1d'):
+        local_midnight = datetime.datetime.now().astimezone().replace(
+            hour=0,
+            minute=0,
+            second=0,
+            microsecond=0,
+        )
+        utc_midnight = local_midnight.astimezone(datetime.timezone.utc)
+        return utc_midnight.strftime('%Y-%m-%d %H:%M:%S')
     now = time.time()
     if range_str == '24h':
         delta = 24 * 60 * 60
@@ -884,6 +982,66 @@ def fetchone_query(adapter, query, params=()):
     if not isinstance(adapter, SqliteAdapter):
         query = query.replace('%', '%%').replace('%%s', '%s')
     return adapter.fetchone(query, params)
+
+def _get_provider_display_name(svc, provider_name: str) -> str:
+    display_name = provider_name
+    if provider_name.startswith('custom-'):
+        custom_models = svc.get_custom_models()
+        target_cm = next((cm for cm in custom_models if cm['id'] == provider_name), None)
+        if target_cm:
+            display_name = str(target_cm.get('display_name') or target_cm.get('base_url') or target_cm['id']).strip()
+    
+    try:
+        keys = svc.get_provider_keys(provider_name)
+    except KeyError:
+        return display_name
+    if len(keys) > 1:
+        return f"{display_name} (轮询)"
+    return display_name
+
+def _aggregate_by_platform(svc, platform_rows) -> list[dict]:
+    agg = {}
+    for r in platform_rows:
+        raw_platform = r[0]
+        display = _get_provider_display_name(svc, raw_platform)
+        requests = int(r[1] or 0)
+        success_rate = float(r[2] or 0)
+        avg_latency_ms = float(r[3] or 0)
+        input_tokens = int(r[4] or 0)
+        output_tokens = int(r[5] or 0)
+        
+        if display not in agg:
+            agg[display] = {
+                'platform': display,
+                'requests': 0,
+                'success_count': 0,
+                'total_latency': 0,
+                'totalInputTokens': 0,
+                'totalOutputTokens': 0
+            }
+        
+        success_count = round((success_rate / 100.0) * requests)
+        agg[display]['requests'] += requests
+        agg[display]['success_count'] += success_count
+        agg[display]['total_latency'] += avg_latency_ms * requests
+        agg[display]['totalInputTokens'] += input_tokens
+        agg[display]['totalOutputTokens'] += output_tokens
+        
+    res = []
+    for display, data in agg.items():
+        reqs = data['requests']
+        succ = data['success_count']
+        tot_lat = data['total_latency']
+        res.append({
+            'platform': display,
+            'requests': reqs,
+            'successRate': round((succ / reqs * 100.0) if reqs > 0 else 0.0, 1),
+            'avgLatencyMs': round((tot_lat / reqs) if reqs > 0 else 0),
+            'totalInputTokens': data['totalInputTokens'],
+            'totalOutputTokens': data['totalOutputTokens']
+        })
+    res.sort(key=lambda x: x['requests'], reverse=True)
+    return res
 
 _analytics_dashboard_cache: dict[str, tuple[float, dict[str, object]]] = {}
 ANALYTICS_DASHBOARD_CACHE_TTL = 30
@@ -910,15 +1068,15 @@ async def get_analytics_summary(range: str = '7d'):
             """,
             (since,)
         )
-        total_requests = row[0] or 0
-        success_count = row[1] or 0
-        total_input_tokens = row[2] or 0
-        total_output_tokens = row[3] or 0
-        avg_latency_ms = row[4] or 0
+        total_requests = int(row[0] or 0)
+        success_count = int(row[1] or 0)
+        total_input_tokens = int(row[2] or 0)
+        total_output_tokens = int(row[3] or 0)
+        avg_latency_ms = float(row[4] or 0)
 
-        success_rate = (success_count / total_requests * 100) if total_requests > 0 else 0
-        input_cost = (total_input_tokens / 1000000) * 3
-        output_cost = (total_output_tokens / 1000000) * 15
+        success_rate = (success_count / total_requests * 100.0) if total_requests > 0 else 0.0
+        input_cost = (total_input_tokens / 1000000.0) * 3.0
+        output_cost = (total_output_tokens / 1000000.0) * 15.0
         estimated_cost_savings = input_cost + output_cost
 
         return {
@@ -957,15 +1115,15 @@ async def get_analytics_by_model(range: str = '7d'):
             """,
             (since,)
         )
-        res = []
+        model_agg = {}
         for r in rows:
             platform = r[0]
             model_id = r[1]
-            requests = r[2] or 0
-            success_rate = r[3] or 0
-            avg_latency_ms = r[4] or 0
-            total_input_tokens = r[5] or 0
-            total_output_tokens = r[6] or 0
+            requests = int(r[2] or 0)
+            success_rate = float(r[3] or 0)
+            avg_latency_ms = float(r[4] or 0)
+            total_input_tokens = int(r[5] or 0)
+            total_output_tokens = int(r[6] or 0)
             
             display_name = model_id
             try:
@@ -976,16 +1134,39 @@ async def get_analytics_by_model(range: str = '7d'):
             except Exception:
                 pass
                 
+            display_platform = _get_provider_display_name(svc, platform)
+            key = (display_platform, model_id, display_name)
+            if key not in model_agg:
+                model_agg[key] = {
+                    'requests': 0,
+                    'success_count': 0,
+                    'total_latency': 0,
+                    'totalInputTokens': 0,
+                    'totalOutputTokens': 0
+                }
+            success_count = round((success_rate / 100.0) * requests)
+            model_agg[key]['requests'] += requests
+            model_agg[key]['success_count'] += success_count
+            model_agg[key]['total_latency'] += avg_latency_ms * requests
+            model_agg[key]['totalInputTokens'] += total_input_tokens
+            model_agg[key]['totalOutputTokens'] += total_output_tokens
+            
+        res = []
+        for key, data in model_agg.items():
+            reqs = data['requests']
+            succ = data['success_count']
+            tot_lat = data['total_latency']
             res.append({
-                'platform': platform,
-                'modelId': model_id,
-                'displayName': display_name,
-                'requests': requests,
-                'successRate': round(success_rate, 1),
-                'avgLatencyMs': round(avg_latency_ms),
-                'totalInputTokens': total_input_tokens,
-                'totalOutputTokens': total_output_tokens,
+                'platform': key[0],
+                'modelId': key[1],
+                'displayName': key[2],
+                'requests': reqs,
+                'successRate': round((succ / reqs * 100.0) if reqs > 0 else 0.0, 1),
+                'avgLatencyMs': round((tot_lat / reqs) if reqs > 0 else 0),
+                'totalInputTokens': data['totalInputTokens'],
+                'totalOutputTokens': data['totalOutputTokens'],
             })
+        res.sort(key=lambda x: x['requests'], reverse=True)
         return res
     finally:
         adapter.close()
@@ -1014,17 +1195,7 @@ async def get_analytics_by_platform(range: str = '7d'):
             """,
             (since,)
         )
-        res = []
-        for r in rows:
-            res.append({
-                'platform': r[0],
-                'requests': r[1] or 0,
-                'successRate': round(r[2] or 0, 1),
-                'avgLatencyMs': round(r[3] or 0),
-                'totalInputTokens': r[4] or 0,
-                'totalOutputTokens': r[5] or 0,
-            })
-        return res
+        return _aggregate_by_platform(svc, rows)
     finally:
         adapter.close()
 
@@ -1064,9 +1235,9 @@ async def get_analytics_timeline(range: str = '7d', interval: str = 'day'):
         rows = execute_query(adapter, query, (since,))
         return [{
             'timestamp': r[0],
-            'requests': r[1] or 0,
-            'successCount': r[2] or 0,
-            'failureCount': r[3] or 0,
+            'requests': int(r[1] or 0),
+            'successCount': int(r[2] or 0),
+            'failureCount': int(r[3] or 0),
         } for r in rows]
     finally:
         adapter.close()
@@ -1138,17 +1309,32 @@ async def get_analytics_error_distribution(range: str = '7d'):
             (since,)
         )
         
+        platform_agg = {}
+        for r in by_platform_rows:
+            display = _get_provider_display_name(svc, r[0])
+            platform_agg[display] = platform_agg.get(display, 0) + (r[1] or 0)
+        by_platform_res = [{'platform': k, 'count': v} for k, v in platform_agg.items()]
+        by_platform_res.sort(key=lambda x: x['count'], reverse=True)
+
+        detailed_agg = {}
+        for r in detailed_rows:
+            display = _get_provider_display_name(svc, r[0])
+            key = (display, r[1], r[2])
+            detailed_agg[key] = detailed_agg.get(key, 0) + (r[3] or 0)
+        detailed_res = [{
+            'platform': k[0],
+            'model_id': k[1],
+            'modelId': k[1],
+            'error_category': k[2],
+            'errorCategory': k[2],
+            'count': v
+        } for k, v in detailed_agg.items()]
+        detailed_res.sort(key=lambda x: x['count'], reverse=True)
+
         return {
             'byCategory': [{'category': r[0], 'count': r[1]} for r in by_category_rows],
-            'byPlatform': [{'platform': r[0], 'count': r[1]} for r in by_platform_rows],
-            'detailed': [{
-                'platform': r[0],
-                'model_id': r[1],
-                'modelId': r[1],
-                'error_category': r[2],
-                'errorCategory': r[2],
-                'count': r[3]
-            } for r in detailed_rows]
+            'byPlatform': by_platform_res,
+            'detailed': detailed_res
         }
     finally:
         adapter.close()
@@ -1173,11 +1359,11 @@ async def get_analytics_errors(range: str = '7d'):
         )
         return [{
             'id': r[0],
-            'platform': r[1],
+            'platform': _get_provider_display_name(svc, r[1]),
             'modelId': r[2],
             'model_id': r[2],
             'error': r[3],
-            'latencyMs': r[4],
+            'latencyMs': float(r[4]) if r[4] is not None else 0,
             'createdAt': str(r[5]),
         } for r in rows]
     finally:
@@ -1208,19 +1394,19 @@ async def get_analytics_dashboard(range: str = '7d'):
             """,
             (since,)
         )
-        total_requests = summary_row[0] or 0
-        success_count = summary_row[1] or 0
-        total_input_tokens = summary_row[2] or 0
-        total_output_tokens = summary_row[3] or 0
-        avg_latency_ms = summary_row[4] or 0
-        success_rate = (success_count / total_requests * 100) if total_requests > 0 else 0
+        total_requests = int(summary_row[0] or 0)
+        success_count = int(summary_row[1] or 0)
+        total_input_tokens = int(summary_row[2] or 0)
+        total_output_tokens = int(summary_row[3] or 0)
+        avg_latency_ms = float(summary_row[4] or 0)
+        success_rate = (success_count / total_requests * 100.0) if total_requests > 0 else 0.0
         summary = {
             'totalRequests': total_requests,
             'successRate': round(success_rate, 1),
             'totalInputTokens': total_input_tokens,
             'totalOutputTokens': total_output_tokens,
             'avgLatencyMs': round(avg_latency_ms),
-            'estimatedCostSavings': round((total_input_tokens / 1000000) * 3 + (total_output_tokens / 1000000) * 15, 2),
+            'estimatedCostSavings': round((total_input_tokens / 1000000.0) * 3.0 + (total_output_tokens / 1000000.0) * 15.0, 2),
         }
 
         platform_rows = execute_query(
@@ -1240,14 +1426,7 @@ async def get_analytics_dashboard(range: str = '7d'):
             """,
             (since,)
         )
-        by_platform = [{
-            'platform': r[0],
-            'requests': r[1] or 0,
-            'successRate': round(r[2] or 0, 1),
-            'avgLatencyMs': round(r[3] or 0),
-            'totalInputTokens': r[4] or 0,
-            'totalOutputTokens': r[5] or 0,
-        } for r in platform_rows]
+        by_platform = _aggregate_by_platform(svc, platform_rows)
 
         if isinstance(adapter, SqliteAdapter):
             date_format = '%Y-%m-%d'
@@ -1278,9 +1457,9 @@ async def get_analytics_dashboard(range: str = '7d'):
         timeline_rows = execute_query(adapter, timeline_query, (since,))
         timeline = [{
             'timestamp': r[0],
-            'requests': r[1] or 0,
-            'successCount': r[2] or 0,
-            'failureCount': r[3] or 0,
+            'requests': int(r[1] or 0),
+            'successCount': int(r[2] or 0),
+            'failureCount': int(r[3] or 0),
         } for r in timeline_rows]
 
         error_by_platform_rows = execute_query(
@@ -1294,9 +1473,16 @@ async def get_analytics_dashboard(range: str = '7d'):
             """,
             (since,)
         )
+        error_platform_agg = {}
+        for r in error_by_platform_rows:
+            display = _get_provider_display_name(svc, r[0])
+            error_platform_agg[display] = error_platform_agg.get(display, 0) + (r[1] or 0)
+        error_by_platform_res = [{'platform': k, 'count': v} for k, v in error_platform_agg.items()]
+        error_by_platform_res.sort(key=lambda x: x['count'], reverse=True)
+
         error_distribution = {
             'byCategory': [],
-            'byPlatform': [{'platform': r[0], 'count': r[1]} for r in error_by_platform_rows],
+            'byPlatform': error_by_platform_res,
             'detailed': [],
         }
 
@@ -1313,11 +1499,11 @@ async def get_analytics_dashboard(range: str = '7d'):
         )
         errors = [{
             'id': r[0],
-            'platform': r[1],
+            'platform': _get_provider_display_name(svc, r[1]),
             'modelId': r[2],
             'model_id': r[2],
             'error': r[3],
-            'latencyMs': r[4],
+            'latencyMs': float(r[4]) if r[4] is not None else 0,
             'createdAt': str(r[5]),
         } for r in error_rows]
 
@@ -1339,10 +1525,16 @@ async def get_analytics_dashboard(range: str = '7d'):
             """,
             (since,)
         )
-        by_model = []
+        model_agg = {}
         for r in model_rows:
             platform = r[0]
             model_id = r[1]
+            requests = int(r[2] or 0)
+            success_rate = float(r[3] or 0)
+            avg_latency_ms = float(r[4] or 0)
+            total_input_tokens = int(r[5] or 0)
+            total_output_tokens = int(r[6] or 0)
+            
             display_name = model_id
             try:
                 from .provider_catalog import get_model_capabilities
@@ -1351,16 +1543,40 @@ async def get_analytics_dashboard(range: str = '7d'):
                     display_name = caps.get('display_name')
             except Exception:
                 pass
+                
+            display_platform = _get_provider_display_name(svc, platform)
+            key = (display_platform, model_id, display_name)
+            if key not in model_agg:
+                model_agg[key] = {
+                    'requests': 0,
+                    'success_count': 0,
+                    'total_latency': 0,
+                    'totalInputTokens': 0,
+                    'totalOutputTokens': 0
+                }
+            success_count = round((success_rate / 100.0) * requests)
+            model_agg[key]['requests'] += requests
+            model_agg[key]['success_count'] += success_count
+            model_agg[key]['total_latency'] += avg_latency_ms * requests
+            model_agg[key]['totalInputTokens'] += total_input_tokens
+            model_agg[key]['totalOutputTokens'] += total_output_tokens
+            
+        by_model = []
+        for key, data in model_agg.items():
+            reqs = data['requests']
+            succ = data['success_count']
+            tot_lat = data['total_latency']
             by_model.append({
-                'platform': platform,
-                'modelId': model_id,
-                'displayName': display_name,
-                'requests': r[2] or 0,
-                'successRate': round(r[3] or 0, 1),
-                'avgLatencyMs': round(r[4] or 0),
-                'totalInputTokens': r[5] or 0,
-                'totalOutputTokens': r[6] or 0,
+                'platform': key[0],
+                'modelId': key[1],
+                'displayName': key[2],
+                'requests': reqs,
+                'successRate': round((succ / reqs * 100.0) if reqs > 0 else 0.0, 1),
+                'avgLatencyMs': round((tot_lat / reqs) if reqs > 0 else 0),
+                'totalInputTokens': data['totalInputTokens'],
+                'totalOutputTokens': data['totalOutputTokens'],
             })
+        by_model.sort(key=lambda x: x['requests'], reverse=True)
 
         dashboard = {
             'summary': summary,

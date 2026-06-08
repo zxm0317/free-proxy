@@ -3,15 +3,17 @@ from __future__ import annotations
 import json
 import os
 import secrets
+import threading
 import time
 from dataclasses import dataclass
 from collections.abc import Callable, Iterable
 from pathlib import Path
 
 from .config import DOTENV_PATH, hydrate_env, load_dotenv
-from .db_store import get_all_keys, get_key, init_db, upsert_key, increment_model_usage, get_model_usage_stats, get_manual_order, save_manual_order, log_request, get_model_probe_results, save_model_probe_result
+from .account_provider_store import delete_account, load_accounts, public_account, save_accounts, upsert_account
+from .db_store import get_all_keys, get_key, init_db, upsert_key, increment_model_usage, get_model_usage_stats, get_manual_order, save_manual_order, log_request, get_model_probe_results, save_model_probe_result, delete_model_probe_results_for_provider
 from .errors import classify_error, remediation_suggestion
-from .health_store import load_health, upsert_health
+from .health_store import load_health, temporary_disabled_models, upsert_health, delete_health_for_provider
 from .openai_relay import OpenAIRelay
 from .preferred_model_store import load_preferred_model, save_preferred_model
 from .provider_adapter import ProviderAdapter
@@ -103,43 +105,253 @@ class ProxyService:
         self.request_timeout_seconds = request_timeout_seconds
         self.request_limiter = RequestLimiterGate(outbound_rpm, 60)
         self.debug_log = debug_log
+        self._runtime_model_lock = threading.Lock()
+        self._runtime_model_state: dict[str, object] = {
+            'active': False,
+            'status': 'idle',
+            'provider': None,
+            'model': None,
+            'full_model': None,
+            'started_at': None,
+            'updated_at': None,
+            'latency_ms': None,
+            'error': None,
+            'last_provider': None,
+            'last_model': None,
+            'last_full_model': None,
+            'last_status': None,
+            'last_latency_ms': None,
+            'last_error': None,
+            'last_finished_at': None,
+            'last_success_provider': None,
+            'last_success_model': None,
+            'last_success_full_model': None,
+            'last_success_latency_ms': None,
+            'last_success_finished_at': None,
+        }
+        self._key_indices: dict[str, int] = {}
+        self._key_select_lock = threading.Lock()
+        self._account_login_sessions: dict[str, dict[str, object]] = {}
         self.sync_custom_providers()
 
     def sync_custom_providers(self) -> None:
-        custom_models_json = get_key(self.db_url, 'custom_openai_models')
-        if custom_models_json:
-            try:
-                custom_models = json.loads(custom_models_json)
-                for cm in custom_models:
-                    from .provider_catalog import register_custom_provider
-                    register_custom_provider(
-                        name=cm['id'],
-                        base_url=cm['base_url'],
-                        api_key_env=f"CUSTOM_KEY_{cm['id']}",
-                        format='openai',
-                        model_hints=[cm['model']]
-                    )
-            except Exception:
-                pass
+        try:
+            from .provider_catalog import clear_custom_providers, register_custom_provider
+            clear_custom_providers()
+            groups = {}
+            for cm in self.get_custom_models():
+                display_name = str(cm.get('display_name') or cm.get('id')).strip()
+                if display_name not in groups:
+                    groups[display_name] = []
+                groups[display_name].append(cm)
+            for display_name, cms in groups.items():
+                primary = cms[0]
+                hints = []
+                for cm in cms:
+                    values = cm.get('models') if isinstance(cm.get('models'), list) else [cm.get('model')]
+                    for val in values:
+                        val_str = str(val or '').strip()
+                        if val_str and val_str not in hints:
+                            hints.append(val_str)
+                if not hints and primary.get('model_hint'):
+                    hints.append(str(primary['model_hint']).strip())
+                register_custom_provider(
+                    name=str(primary['id']),
+                    base_url=str(primary['base_url']),
+                    api_key_env=f"CUSTOM_KEY_{primary['id']}",
+                    format='openai',
+                    model_hints=hints,
+                )
+        except Exception:
+            pass
 
     def available_providers(self) -> list[str]:
         providers = configured_provider_names(get_all_keys(self.db_url))
         disabled = self.get_disabled_providers()
         providers = [p for p in providers if p not in disabled and not p.startswith('custom-')]
+        if self._active_account_provider_accounts('qoder') and 'qoder' not in disabled and 'qoder' not in providers:
+            providers.append('qoder')
+        
         custom_models = self.get_custom_models()
+        custom_groups = {}
         for cm in custom_models:
-            if cm.get('enabled', True) is not False:
+            display_name = str(cm.get('display_name') or cm['id']).strip()
+            if display_name not in custom_groups:
+                custom_groups[display_name] = []
+            custom_groups[display_name].append(cm)
+            
+        primary_customs = [group[0] for group in custom_groups.values()]
+        for cm in primary_customs:
+            if cm.get('enabled', True) is not False and cm.get('verified') is True:
                 providers.append(cm['id'])
         return providers
+
+    def mark_runtime_model_start(self, provider_name: str, model_id: str) -> None:
+        now = time.time()
+        full_model = f'{provider_name}/{model_id}'
+        with self._runtime_model_lock:
+            self._runtime_model_state.update({
+                'active': True,
+                'status': 'calling',
+                'provider': provider_name,
+                'model': model_id,
+                'full_model': full_model,
+                'started_at': now,
+                'updated_at': now,
+                'latency_ms': None,
+                'error': None,
+            })
+
+    def mark_runtime_model_finish(self, provider_name: str, model_id: str, ok: bool, latency_ms: int | None = None, error: str | None = None) -> None:
+        now = time.time()
+        full_model = f'{provider_name}/{model_id}'
+        status = 'success' if ok else 'failed'
+        with self._runtime_model_lock:
+            state = self._runtime_model_state
+            is_current = state.get('provider') == provider_name and state.get('model') == model_id
+            state.update({
+                'last_provider': provider_name,
+                'last_model': model_id,
+                'last_full_model': full_model,
+                'last_status': status,
+                'last_latency_ms': latency_ms,
+                'last_error': error,
+                'last_finished_at': now,
+            })
+            if ok:
+                state.update({
+                    'last_success_provider': provider_name,
+                    'last_success_model': model_id,
+                    'last_success_full_model': full_model,
+                    'last_success_latency_ms': latency_ms,
+                    'last_success_finished_at': now,
+                })
+            if is_current:
+                state.update({
+                    'active': False,
+                    'status': status,
+                    'latency_ms': latency_ms,
+                    'error': error,
+                    'updated_at': now,
+                })
+
+    def runtime_model_status(self) -> dict[str, object]:
+        with self._runtime_model_lock:
+            return dict(self._runtime_model_state)
 
     def public_models(self) -> list[dict[str, str]]:
         return [dict(item) for item in PUBLIC_MODEL_ALIASES]
 
-    def provider_adapter(self, provider_name: str) -> ProviderAdapter:
+    def get_provider_keys(self, provider_name: str) -> list[dict[str, str]]:
+        db_keys = get_all_keys(self.db_url)
+        if provider_name == 'qoder':
+            return [
+                {
+                    'id': str(account.get('id')),
+                    'api_key': str(account.get('access_token') or ''),
+                    'label': str(account.get('label') or account.get('email') or account.get('name') or account.get('id')),
+                    'account': account,
+                }
+                for account in self._active_account_provider_accounts('qoder')
+                if account.get('access_token')
+            ]
+        if provider_name.startswith('custom-'):
+            custom_models = self.get_custom_models()
+            target_cm = next((cm for cm in custom_models if cm['id'] == provider_name), None)
+            if target_cm:
+                display_name = str(target_cm.get('display_name') or target_cm['id']).strip()
+                same_display_cms = [
+                    cm for cm in custom_models
+                    if str(cm.get('display_name') or cm['id']).strip() == display_name
+                ]
+                keys = []
+                for idx, cm in enumerate(same_display_cms):
+                    api_key = db_keys.get(f"CUSTOM_KEY_{cm['id']}", cm.get('api_key', ''))
+                    if api_key:
+                        keys.append({
+                            "id": cm['id'],
+                            "api_key": api_key,
+                            "label": cm.get('label') or f"Account {idx + 1}",
+                            "base_url": cm.get('base_url')
+                        })
+                return keys
+            return []
+
+        multi_keys_raw = db_keys.get(f"multi_keys_{provider_name}", "")
+        if multi_keys_raw:
+            try:
+                keys = json.loads(multi_keys_raw)
+                if isinstance(keys, list):
+                    for idx, item in enumerate(keys):
+                        if not isinstance(item, dict):
+                            continue
+                        if 'id' not in item:
+                            item['id'] = f"key_{idx}"
+                        if 'label' not in item:
+                            item['label'] = f"Key {idx + 1}"
+                    return keys
+            except Exception:
+                pass
+        
         provider = get_provider(provider_name)
-        api_key = get_key(self.db_url, provider.api_key_env) or ''
+        legacy_key = db_keys.get(provider.api_key_env, "")
+        if legacy_key:
+            return [{"id": "default", "api_key": legacy_key, "label": "Default"}]
+            
+        return []
+
+    def get_next_api_key(self, provider_name: str) -> str:
+        keys = self.get_provider_keys(provider_name)
+        if not keys:
+            return ''
+        with self._key_select_lock:
+            idx = self._key_indices.get(provider_name, 0)
+            if idx >= len(keys):
+                idx = 0
+            selected_key = keys[idx]['api_key']
+            self._key_indices[provider_name] = (idx + 1) % len(keys)
+            return selected_key
+
+    def provider_adapter(self, provider_name: str, key_id: str | None = None) -> ProviderAdapter:
+        if provider_name == 'qoder':
+            from .qoder_provider import QoderProviderAdapter
+            account = self._select_account_provider_account('qoder', key_id=key_id)
+            return QoderProviderAdapter(
+                account=account,
+                transport=self.transport,
+                request_timeout_seconds=max(self.request_timeout_seconds, 30),
+            )  # type: ignore[return-value]
+
+        provider = get_provider(provider_name)
+        base_url = None
+        if key_id is not None:
+            keys = self.get_provider_keys(provider_name)
+            target = next((k for k in keys if k['id'] == key_id), None)
+            if not target:
+                raise ProviderError(f'Key ID {key_id} not found')
+            api_key = target['api_key']
+            base_url = target.get('base_url')
+        else:
+            keys = self.get_provider_keys(provider_name)
+            if keys:
+                with self._key_select_lock:
+                    idx = self._key_indices.get(provider_name, 0)
+                    if idx >= len(keys):
+                        idx = 0
+                    target = keys[idx]
+                    self._key_indices[provider_name] = (idx + 1) % len(keys)
+                api_key = target['api_key']
+                base_url = target.get('base_url')
+            else:
+                api_key = ''
+            
         if not api_key and not provider_name.startswith('custom-'):
             raise ProviderError(f'{provider_name} 没有配置 API Key')
+            
+        if provider_name.startswith('custom-') and base_url:
+            from dataclasses import replace
+            provider = replace(provider, base_url=base_url)
+            
         return ProviderAdapter(
             provider=provider,
             api_key=api_key,
@@ -161,11 +373,172 @@ class ProxyService:
             usage_incrementer=lambda provider, model: increment_model_usage(self.db_url, provider, model),
             manual_order_loader=self.get_manual_order,
             disabled_models_loader=self.get_disabled_models,
+            allowed_models_loader=self.usable_model_keys,
             request_logger=lambda platform, model_id, status, input_tokens, output_tokens, latency_ms, error=None: log_request(self.db_url, platform, model_id, status, input_tokens, output_tokens, latency_ms, error),
+            runtime_model_start=self.mark_runtime_model_start,
+            runtime_model_finish=self.mark_runtime_model_finish,
         )
+
+    def account_provider_accounts(self, provider_name: str) -> list[dict[str, object]]:
+        return load_accounts(self.db_url, provider_name)
+
+    def _active_account_provider_accounts(self, provider_name: str) -> list[dict[str, object]]:
+        return [
+            account for account in self.account_provider_accounts(provider_name)
+            if account.get('status', 'active') == 'active' and str(account.get('access_token') or '').strip()
+        ]
+
+    def _select_account_provider_account(self, provider_name: str, key_id: str | None = None) -> dict[str, object]:
+        accounts = self._active_account_provider_accounts(provider_name)
+        if key_id is not None:
+            target = next((account for account in accounts if str(account.get('id')) == key_id), None)
+            if target is None:
+                raise ProviderError(f'{provider_name} account {key_id} not found')
+            return target
+        if not accounts:
+            raise ProviderError(f'{provider_name} 没有可用账号')
+        with self._key_select_lock:
+            idx_key = f'account:{provider_name}'
+            idx = self._key_indices.get(idx_key, 0)
+            if idx >= len(accounts):
+                idx = 0
+            account = accounts[idx]
+            self._key_indices[idx_key] = (idx + 1) % len(accounts)
+        account['last_used_at'] = int(time.time())
+        all_accounts = self.account_provider_accounts(provider_name)
+        for index, current in enumerate(all_accounts):
+            if str(current.get('id')) == str(account.get('id')):
+                all_accounts[index] = account
+                save_accounts(self.db_url, provider_name, all_accounts)
+                break
+        return account
+
+    def account_provider_statuses(self) -> dict[str, dict[str, object]]:
+        return {
+            'qoder': {
+                'provider': 'qoder',
+                'name': 'Qoder',
+                'configured': bool(self._active_account_provider_accounts('qoder')),
+                'accounts': [public_account(account) for account in self.account_provider_accounts('qoder')],
+                'supports_login': True,
+                'supports_round_robin': True,
+            }
+        }
+
+    def start_account_provider_login(self, provider_name: str) -> dict[str, object]:
+        if provider_name != 'qoder':
+            raise ProviderError(f'unsupported account provider: {provider_name}')
+        from .qoder_provider import start_qoder_login
+        flow = start_qoder_login()
+        state = secrets.token_hex(12)
+        self._account_login_sessions[state] = {
+            'provider': provider_name,
+            'code_verifier': flow['code_verifier'],
+            'nonce': flow['nonce'],
+            'machine_id': flow['machine_id'],
+            'created_at': int(time.time()),
+        }
+        return {
+            'ok': True,
+            'provider': provider_name,
+            'state': state,
+            'verification_url': flow['verification_url'],
+            'expires_in': 300,
+        }
+
+    def poll_account_provider_login(self, provider_name: str, state: str) -> dict[str, object]:
+        session = self._account_login_sessions.get(state)
+        if not session or session.get('provider') != provider_name:
+            raise ProviderError('login session not found')
+        if int(time.time()) - int(session.get('created_at') or 0) > 600:
+            self._account_login_sessions.pop(state, None)
+            raise ProviderError('login session expired')
+        if provider_name != 'qoder':
+            raise ProviderError(f'unsupported account provider: {provider_name}')
+        from .qoder_provider import poll_qoder_login
+        result = poll_qoder_login(
+            nonce=str(session.get('nonce') or ''),
+            code_verifier=str(session.get('code_verifier') or ''),
+            machine_id=str(session.get('machine_id') or ''),
+        )
+        if result.get('status') != 'ok':
+            return {'ok': True, 'provider': provider_name, 'status': 'pending'}
+        account = upsert_account(self.db_url, provider_name, dict(result.get('account') or {}))
+        self._account_login_sessions.pop(state, None)
+        return {
+            'ok': True,
+            'provider': provider_name,
+            'status': 'ok',
+            'account': public_account(account),
+        }
+
+    def delete_account_provider_account(self, provider_name: str, account_id: str) -> dict[str, object]:
+        deleted = delete_account(self.db_url, provider_name, account_id)
+        if not deleted:
+            raise ProviderError('account not found')
+        if provider_name == 'qoder':
+            self._clear_provider_model_state('qoder')
+        return {'ok': True, 'provider': provider_name, 'id': account_id}
+
+    def validate_account_provider(self, provider_name: str) -> dict[str, object]:
+        if provider_name != 'qoder':
+            raise ProviderError(f'unsupported account provider: {provider_name}')
+        try:
+            models = self.list_models(provider_name)
+        except Exception as exc:
+            return {'ok': False, 'provider': provider_name, 'error': str(exc), 'models': []}
+        return {'ok': True, 'provider': provider_name, 'models': models, 'account_count': len(self._active_account_provider_accounts(provider_name))}
+
+    def probe_account_provider_models(self, provider_name: str) -> dict[str, object]:
+        validation = self.validate_account_provider(provider_name)
+        if not validation.get('ok'):
+            return validation
+        models = [str(model) for model in validation.get('models', [])]
+        results = []
+        ok_count = 0
+        for model in models[:12]:
+            started = time.time()
+            result = self.probe(provider_name, model, timeout=45)
+            latency_ms = int((time.time() - started) * 1000)
+            model_key = f'{provider_name}/{model}'
+            self.record_model_probe_result(
+                model_key,
+                ok=result.ok,
+                latency_ms=latency_ms,
+                status=result.status,
+                error=result.error or '',
+            )
+            if result.ok:
+                ok_count += 1
+            results.append({
+                'model': model,
+                'ok': result.ok,
+                'latency_ms': latency_ms,
+                'error': result.error or '',
+            })
+        return {'ok': ok_count > 0, 'provider': provider_name, 'models': models, 'results': results, 'success_count': ok_count}
 
     def get_usage_stats(self) -> list[dict[str, object]]:
         return get_model_usage_stats(self.db_url)
+
+    def usable_model_keys(self) -> set[str]:
+        from .scoring import is_chat_candidate_model
+        probe_results = get_model_probe_results(self.db_url)
+        disabled_models = set(self.get_disabled_models())
+        active_providers = set(self.available_providers())
+        usable: set[str] = set()
+        for key, probe in probe_results.items():
+            if not isinstance(probe, dict) or probe.get('ok') is not True:
+                continue
+            if key in disabled_models or '/' not in key:
+                continue
+            provider, _ = key.split('/', 1)
+            if provider not in active_providers:
+                continue
+            if not is_chat_candidate_model(provider, key.split('/', 1)[1]):
+                continue
+            usable.add(key)
+        return usable
 
     def get_manual_order(self, bypass_cache: bool = False) -> list[str]:
         return get_manual_order(self.db_url, bypass_cache)
@@ -192,32 +565,95 @@ class ProxyService:
         return f'{value[:4]}***{value[-4:]}'
 
     def provider_key_statuses(self) -> dict[str, dict[str, object]]:
-        db_keys = get_all_keys(self.db_url)
         disabled = self.get_disabled_providers()
         statuses: dict[str, dict[str, object]] = {}
         for provider in list_providers():
-            value = str(db_keys.get(provider.api_key_env, '')).strip()
+            keys = self.get_provider_keys(provider.name)
             statuses[provider.name] = {
-                'configured': bool(value),
-                'masked': self._mask_key(value) if value else '',
-                'enabled': bool(value) and (provider.name not in disabled),
+                'configured': len(keys) > 0,
+                'masked': self._mask_key(keys[0]['api_key']) if keys else '',
+                'enabled': len(keys) > 0 and (provider.name not in disabled),
+                'keys': [
+                    {
+                        'id': k['id'],
+                        'masked': self._mask_key(k['api_key']),
+                        'label': k.get('label') or 'Default',
+                    } for k in keys
+                ],
                 'models': [m for m in get_provider_model_hints(provider.name) if m.startswith('free-proxy/')],
             }
+            if provider.name == 'qoder':
+                statuses[provider.name]['account_provider'] = True
+                statuses[provider.name]['name'] = 'Qoder'
+                statuses[provider.name]['display_name'] = 'Qoder'
+                statuses[provider.name]['accounts'] = [public_account(account) for account in self.account_provider_accounts('qoder')]
         return statuses
 
-    def configure_provider_key(self, provider_name: str, api_key: str) -> dict[str, object]:
+    def configure_provider_key(self, provider_name: str, api_key: str, label: str = '', key_id: str | None = None) -> dict[str, object]:
         provider = get_provider(provider_name)
         value = api_key.strip()
         if not value:
             raise ProviderError('api_key 不能为空')
-        upsert_key(self.db_url, provider.api_key_env, value)
+            
+        keys = self.get_provider_keys(provider_name)
+        
+        if key_id is not None:
+            target = next((k for k in keys if k['id'] == key_id), None)
+            if target:
+                target['api_key'] = value
+                if label.strip():
+                    target['label'] = label.strip()
+            else:
+                raise ProviderError(f'Key ID {key_id} not found')
+        else:
+            new_id = secrets.token_hex(4)
+            lbl = label.strip() or f"Key {len(keys) + 1}"
+            keys.append({
+                'id': new_id,
+                'api_key': value,
+                'label': lbl
+            })
+            
+        upsert_key(self.db_url, f"multi_keys_{provider_name}", json.dumps(keys))
+        if keys:
+            upsert_key(self.db_url, provider.api_key_env, keys[0]['api_key'])
+            
+        if hasattr(self, '_models_cache'):
+            self._models_cache.pop(provider_name, None)
+            
         return {'ok': True, 'provider': provider_name, 'masked': self._mask_key(value)}
 
-    def delete_provider_key(self, provider_name: str) -> dict[str, object]:
+    def _clear_provider_model_state(self, provider_name: str) -> None:
+        delete_model_probe_results_for_provider(self.db_url, provider_name)
+        delete_health_for_provider(provider_name, self.health_path)
+        disabled_models = [key for key in self._persistent_disabled_models() if not key.startswith(f'{provider_name}/')]
+        upsert_key(self.db_url, 'disabled_models', json.dumps(disabled_models))
+        manual_order = [key for key in self.get_manual_order() if not key.startswith(f'{provider_name}/')]
+        save_manual_order(self.db_url, manual_order)
+        if hasattr(self, '_models_cache'):
+            self._models_cache.pop(provider_name, None)
+
+    def delete_provider_key(self, provider_name: str, key_id: str | None = None) -> dict[str, object]:
         provider = get_provider(provider_name)
-        from .db_store import delete_key
-        delete_key(self.db_url, provider.api_key_env)
-        return {'ok': True, 'provider': provider_name}
+        if key_id is not None:
+            keys = self.get_provider_keys(provider_name)
+            filtered = [k for k in keys if k['id'] != key_id]
+            if len(filtered) < len(keys):
+                if filtered:
+                    upsert_key(self.db_url, f"multi_keys_{provider_name}", json.dumps(filtered))
+                    upsert_key(self.db_url, provider.api_key_env, filtered[0]['api_key'])
+                else:
+                    from .db_store import delete_key
+                    delete_key(self.db_url, f"multi_keys_{provider_name}")
+                    delete_key(self.db_url, provider.api_key_env)
+                    self._clear_provider_model_state(provider.name)
+            return {'ok': True, 'provider': provider_name}
+        else:
+            from .db_store import delete_key
+            delete_key(self.db_url, f"multi_keys_{provider_name}")
+            delete_key(self.db_url, provider.api_key_env)
+            self._clear_provider_model_state(provider.name)
+            return {'ok': True, 'provider': provider_name}
 
     def get_disabled_providers(self) -> list[str]:
         data_str = get_key(self.db_url, 'disabled_providers')
@@ -250,19 +686,29 @@ class ProxyService:
             upsert_key(self.db_url, 'disabled_providers', json.dumps(disabled))
             return {'ok': True}
 
-    def get_disabled_models(self) -> list[str]:
+    def _persistent_disabled_models(self) -> list[str]:
         data_str = get_key(self.db_url, 'disabled_models')
         if not data_str:
             return []
         try:
-            import json
-            return json.loads(data_str)
+            disabled = json.loads(data_str)
         except Exception:
             return []
+        if not isinstance(disabled, list):
+            return []
+        return [str(item) for item in disabled]
+
+    def get_disabled_models(self) -> list[str]:
+        temp_disabled = temporary_disabled_models(self.health_path)
+        merged = self._persistent_disabled_models()
+        for key in temp_disabled:
+            if key not in merged:
+                merged.append(key)
+        return merged
 
     def toggle_model(self, model_key: str, enabled: bool) -> dict[str, object]:
         import json
-        disabled = self.get_disabled_models()
+        disabled = self._persistent_disabled_models()
         if enabled:
             if model_key in disabled:
                 disabled.remove(model_key)
@@ -295,13 +741,94 @@ class ProxyService:
         if not data_str:
             return []
         try:
-            return json.loads(data_str)
+            raw = json.loads(data_str)
         except Exception:
             return []
+        if not isinstance(raw, list):
+            return []
+        grouped: list[dict[str, object]] = []
+        by_key: dict[tuple[str, str], dict[str, object]] = {}
+        for item in raw:
+            if not isinstance(item, dict):
+                continue
+            base_url = str(item.get('base_url', '')).strip()
+            if not base_url:
+                continue
+            api_key = str(item.get('api_key', '') or '')
+            key = (base_url.rstrip('/'), api_key)
+            group = by_key.get(key)
+            if group is None:
+                group = dict(item)
+                group['id'] = str(item.get('id') or f"custom-{len(grouped) + 1}")
+                group['base_url'] = base_url
+                group['api_key'] = api_key
+                group['models'] = []
+                grouped.append(group)
+                by_key[key] = group
+            model_values = item.get('models') if isinstance(item.get('models'), list) else [item.get('model')]
+            for model_value in model_values:
+                model_id = str(model_value or '').strip()
+                if model_id and model_id not in group['models']:
+                    group['models'].append(model_id)
+        for group in grouped:
+            models = group.get('models') if isinstance(group.get('models'), list) else []
+            group['model'] = models[0] if models else group.get('model_hint', '')
+            group['display_name'] = str(group.get('display_name') or group.get('model') or group.get('id'))
+            if 'verified' not in group:
+                group['verified'] = bool(models)
+            group['verify_error'] = str(group.get('verify_error') or '')
+            group['model_hint'] = str(group.get('model_hint') or '')
+        return grouped
 
-    def add_custom_model(self, base_url: str, model: str, display_name: str = '', api_key: str = '') -> dict[str, object]:
+    @staticmethod
+    def _custom_models_url(base_url: str) -> str:
+        clean = base_url.strip().rstrip('/')
+        if clean.endswith('/chat/completions'):
+            clean = clean[: -len('/chat/completions')]
+        return f'{clean}/models'
+
+    def discover_custom_models(self, base_url: str, api_key: str = '') -> list[str]:
+        import urllib.request
+        import urllib.error
+        url = self._custom_models_url(base_url)
+        headers = {'Accept': 'application/json'}
+        if api_key.strip():
+            headers['Authorization'] = f'Bearer {api_key.strip()}'
+        req = urllib.request.Request(url, headers=headers, method='GET')
+        try:
+            with urllib.request.urlopen(req, timeout=8) as resp:
+                raw = resp.read().decode('utf-8', errors='replace')
+        except Exception as exc:
+            raise ProviderError(f'无法读取模型列表: {exc}') from exc
+        try:
+            data = json.loads(raw)
+        except Exception as exc:
+            raise ProviderError('模型列表返回的不是 JSON') from exc
+        items = data.get('data') if isinstance(data, dict) else data
+        if not isinstance(items, list):
+            raise ProviderError('模型列表格式不正确')
+        models: list[str] = []
+        for item in items:
+            raw_id = item.get('id') if isinstance(item, dict) else item
+            if isinstance(raw_id, str) and raw_id.strip():
+                model_id = raw_id.strip()
+                if model_id not in models:
+                    models.append(model_id)
+        if not models:
+            raise ProviderError('没有读取到任何模型')
+        return models
+
+    def add_custom_model(self, base_url: str, model: str = '', display_name: str = '', api_key: str = '') -> dict[str, object]:
         models = self.get_custom_models()
-        custom_ids = {m['id'] for m in models}
+        model_hint = model.strip()
+        discovered_models = []
+        base_key = base_url.rstrip('/')
+        target = None
+        for item in models:
+            if str(item.get('base_url', '')).rstrip('/') == base_key and str(item.get('api_key', '') or '') == api_key:
+                target = item
+                break
+        custom_ids = {str(m['id']) for m in models if m.get('id')}
         new_id = None
         i = 1
         while True:
@@ -310,24 +837,72 @@ class ProxyService:
                 new_id = candidate
                 break
             i += 1
-        
-        new_model = {
-            'id': new_id,
-            'base_url': base_url,
-            'model': model,
-            'display_name': display_name or model,
-            'api_key': api_key,
-            'enabled': True,
-            'created_at': int(time.time())
-        }
-        models.append(new_model)
+        if target is None:
+            target = {
+                'id': new_id,
+                'base_url': base_url,
+                'models': [],
+                'model_hint': model_hint,
+                'verified': False,
+                'verify_error': '',
+                'display_name': display_name or base_url,
+                'api_key': api_key,
+                'enabled': True,
+                'created_at': int(time.time()),
+            }
+            models.append(target)
+        current_models = target.get('models') if isinstance(target.get('models'), list) else []
+        if not current_models and model_hint:
+            current_models.append(model_hint)
+        added_models = []
+        for discovered in discovered_models:
+            if discovered not in current_models:
+                current_models.append(discovered)
+                added_models.append(discovered)
+        target['models'] = current_models
+        target['model'] = current_models[0] if current_models else model_hint
+        target['model_hint'] = model_hint or str(target.get('model_hint') or '')
+        target['verified'] = bool(current_models)
+        target['verify_error'] = ''
+        if display_name:
+            target['display_name'] = display_name
+        if False and not added_models:
+            return {'ok': True, 'models': [], 'added': 0, 'message': '没有新增模型'}
         upsert_key(self.db_url, 'custom_openai_models', json.dumps(models))
-        
         if api_key:
-            upsert_key(self.db_url, f"CUSTOM_KEY_{new_id}", api_key)
-            
+            upsert_key(self.db_url, f"CUSTOM_KEY_{target['id']}", api_key)
         self.sync_custom_providers()
-        return {'ok': True, 'model': new_model}
+        return {'ok': True, 'model': target, 'models': added_models, 'added': len(added_models), 'verified': target.get('verified') is True}
+
+    def verify_custom_model(self, model_id: str) -> dict[str, object]:
+        models = self.get_custom_models()
+        target = None
+        for item in models:
+            if item.get('id') == model_id:
+                target = item
+                break
+        if target is None:
+            raise ProviderError('custom provider not found')
+        try:
+            discovered_models = self.discover_custom_models(str(target.get('base_url') or ''), str(target.get('api_key') or ''))
+            hint = str(target.get('model_hint') or '').strip()
+            if hint and hint not in discovered_models:
+                discovered_models.insert(0, hint)
+            target['models'] = discovered_models
+            target['model'] = discovered_models[0] if discovered_models else ''
+            target['verified'] = True
+            target['verify_error'] = ''
+            target['verified_at'] = int(time.time())
+        except Exception as exc:
+            target['verified'] = False
+            target['verify_error'] = str(exc)
+            target['verified_at'] = int(time.time())
+            upsert_key(self.db_url, 'custom_openai_models', json.dumps(models))
+            self.sync_custom_providers()
+            raise
+        upsert_key(self.db_url, 'custom_openai_models', json.dumps(models))
+        self.sync_custom_providers()
+        return {'ok': True, 'model': target, 'models': discovered_models, 'added': len(discovered_models), 'verified': True}
 
     def delete_custom_model(self, model_id: str) -> dict[str, object]:
         models = self.get_custom_models()
@@ -335,6 +910,7 @@ class ProxyService:
         upsert_key(self.db_url, 'custom_openai_models', json.dumps(filtered))
         from .db_store import delete_key
         delete_key(self.db_url, f"CUSTOM_KEY_{model_id}")
+        self._clear_provider_model_state(model_id)
         self.sync_custom_providers()
         return {'ok': True, 'id': model_id}
 
@@ -375,7 +951,7 @@ class ProxyService:
     def get_admin_password(self) -> str:
         return get_key(self.db_url, 'ADMIN_PASSWORD') or ''
 
-    def verify_provider_key(self, provider_name: str) -> dict[str, object]:
+    def verify_provider_key(self, provider_name: str, key_id: str | None = None) -> dict[str, object]:
         def diagnose(exc: ProviderError) -> tuple[str, int | None, str]:
             if isinstance(exc, ProviderHTTPError):
                 category = exc.category
@@ -387,7 +963,7 @@ class ProxyService:
             return category, status, suggestion
 
         try:
-            models = self.list_models(provider_name)
+            models = self.list_models(provider_name, key_id=key_id)
         except ProviderError as exc:
             models = []
             first_error: ProviderError | None = exc
@@ -401,7 +977,7 @@ class ProxyService:
                 candidates.append(model)
 
         for candidate in candidates[:3]:
-            result = self.probe(provider_name, candidate)
+            result = self.probe(provider_name, candidate, key_id=key_id)
             if result.ok:
                 return {
                     'ok': True,
@@ -425,7 +1001,7 @@ class ProxyService:
             }
 
         if candidates:
-            failed = self.probe(provider_name, candidates[0])
+            failed = self.probe(provider_name, candidates[0], key_id=key_id)
             category = failed.category or classify_error(0, failed.error or '').category
             return {
                 'ok': False,
@@ -465,14 +1041,14 @@ class ProxyService:
             ttl_seconds=self.health_ttl_seconds,
         )
 
-    def list_models(self, provider_name: str) -> list[str]:
-        return self.provider_adapter(provider_name).list_models()
+    def list_models(self, provider_name: str, key_id: str | None = None) -> list[str]:
+        return self.provider_adapter(provider_name, key_id=key_id).list_models()
 
-    def probe(self, provider_name: str, model_id: str, timeout: int | None = None) -> ProbeResult:
-        return self.chat(provider_name, model_id, prompt='ok', max_output_tokens=1, timeout=timeout)
+    def probe(self, provider_name: str, model_id: str, timeout: int | None = None, key_id: str | None = None) -> ProbeResult:
+        return self.chat(provider_name, model_id, prompt='ok', max_output_tokens=1, timeout=timeout, record_runtime=False, key_id=key_id)
 
-    def chat(self, provider_name: str, model_id: str, prompt: str, max_output_tokens: int | None = None, timeout: int | None = None) -> ProbeResult:
-        adapter = self.provider_adapter(provider_name)
+    def chat(self, provider_name: str, model_id: str, prompt: str, max_output_tokens: int | None = None, timeout: int | None = None, record_runtime: bool = True, key_id: str | None = None) -> ProbeResult:
+        adapter = self.provider_adapter(provider_name, key_id=key_id)
         trimmed = trim_prompt(provider_name, prompt)
         candidates = [model_id]
 
@@ -483,6 +1059,9 @@ class ProxyService:
         last_status: int | None = None
 
         for candidate in candidates:
+            attempt_start = time.time()
+            if record_runtime:
+                self.mark_runtime_model_start(provider_name, candidate)
             budget = resolve_token_budget(
                 provider=provider_name,
                 model=candidate,
@@ -494,6 +1073,8 @@ class ProxyService:
             try:
                 content = adapter.chat_text(candidate, budget.trimmed_prompt, max_tokens=budget.output_tokens_limit, timeout=timeout)
                 upsert_health(provider_name, candidate, True, path=self.health_path)
+                if record_runtime:
+                    self.mark_runtime_model_finish(provider_name, candidate, True, int((time.time() - attempt_start) * 1000), None)
                 return ProbeResult(provider=provider_name, model=model_id, ok=True, actual_model=candidate, content=content)
             except ProviderError as exc:
                 last_error = str(exc)
@@ -531,6 +1112,8 @@ class ProxyService:
                     try:
                         retry_content = adapter.chat_text(candidate, retry_budget.trimmed_prompt, max_tokens=retry_budget.output_tokens_limit, timeout=timeout)
                         upsert_health(provider_name, candidate, True, path=self.health_path)
+                        if record_runtime:
+                            self.mark_runtime_model_finish(provider_name, candidate, True, int((time.time() - attempt_start) * 1000), None)
                         return ProbeResult(provider=provider_name, model=model_id, ok=True, actual_model=candidate, content=retry_content)
                     except ProviderError as retry_exc:
                         last_error = str(retry_exc)
@@ -541,6 +1124,8 @@ class ProxyService:
                             last_category = classify_error(0, last_error).category
                             last_status = None
                 upsert_health(provider_name, candidate, False, reason=last_category, path=self.health_path)
+                if record_runtime:
+                    self.mark_runtime_model_finish(provider_name, candidate, False, int((time.time() - attempt_start) * 1000), last_error)
 
         final_category = last_category or classify_error(0, last_error or '').category
         return ProbeResult(
@@ -580,34 +1165,144 @@ class ProxyService:
         self._models_cache[provider_name] = (models, now + 300)
         return models
 
+    def _model_analysis_stats(self, days: int = 7) -> dict[str, dict[str, object]]:
+        from .db_store import get_adapter, SqliteAdapter
+        import datetime
+
+        since = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=days)
+        since_value = since.strftime('%Y-%m-%d %H:%M:%S')
+        adapter = get_adapter(self.db_url)
+        try:
+            rows = adapter.fetchall(
+                """
+                SELECT
+                  platform,
+                  model_id,
+                  COUNT(*) as request_count,
+                  SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) as success_count,
+                  AVG(latency_ms) as avg_latency_ms
+                FROM requests
+                WHERE created_at >= %s
+                GROUP BY platform, model_id
+                """,
+                (since_value,),
+            )
+            error_rows = adapter.fetchall(
+                """
+                SELECT platform, model_id, error
+                FROM requests
+                WHERE status = 'error' AND created_at >= %s
+                ORDER BY created_at DESC
+                """,
+                (since_value,),
+            )
+        except Exception:
+            return {}
+        finally:
+            adapter.close()
+
+        recent_errors: dict[str, str] = {}
+        for provider, model, error in error_rows:
+            key = f'{provider}/{model}'
+            if key not in recent_errors:
+                recent_errors[key] = str(error or '')
+
+        def classify_hide_reason(request_count: int, success_rate: float | None, recent_error: str) -> str:
+            error_lower = recent_error.lower()
+            if any(term in recent_error for term in ('额度不足', '余额不足')) or any(term in error_lower for term in ('quota', 'rate limit', 'insufficient_quota')):
+                return '额度不足或限流'
+            if any(term in recent_error for term in ('API Key 无效', '权限不足', '无效')) or any(term in error_lower for term in ('invalid key', 'unauthorized', 'forbidden', 'api key')):
+                return 'API Key 无效或权限不足'
+            if success_rate is not None and request_count >= 3 and success_rate < 50:
+                return f'成功率过低 {success_rate:.1f}%'
+            if success_rate == 0 and request_count >= 2:
+                return '最近调用全部失败'
+            return ''
+
+        analysis: dict[str, dict[str, object]] = {}
+        for provider, model, request_count, success_count, avg_latency in rows:
+            key = f'{provider}/{model}'
+            count = int(request_count or 0)
+            successes = int(success_count or 0)
+            success_rate = (successes / count * 100) if count else None
+            recent_error = recent_errors.get(key, '')
+            hide_reason = classify_hide_reason(count, success_rate, recent_error)
+            analysis[key] = {
+                'usage_count': count,
+                'success_count': successes,
+                'success_rate': round(success_rate, 1) if success_rate is not None else None,
+                'avg_latency_ms': round(float(avg_latency or 0)),
+                'recent_error': recent_error,
+                'analysis_status': 'hidden' if hide_reason else 'ok',
+                'hide_reason': hide_reason,
+            }
+        return analysis
+
     def models_stats(self) -> dict[str, object]:
         from .provider_routing import build_auto_candidates
-        from .scoring import expected_reliability, synthetic_speed_score, synthetic_intelligence_score, headroom_factor, combine_score, BANDIT_PRESETS, get_model_limits
+        from .qoder_provider import qoder_model_display_name, qoder_model_key_display
+        from .scoring import expected_reliability, synthetic_speed_score, synthetic_intelligence_score, headroom_factor, combine_score, BANDIT_PRESETS, get_model_limits, route_priority_sort_key, is_chat_candidate_model
         health = load_health(self.health_path)
         manual_order = self.get_manual_order()
         probe_results = get_model_probe_results(self.db_url)
+        analysis_stats = self._model_analysis_stats()
         
         db_keys = get_all_keys(self.db_url)
         configured_names = configured_provider_names(db_keys)
+        for provider_name in ('qoder',):
+            if self._active_account_provider_accounts(provider_name) and provider_name not in configured_names:
+                configured_names.append(provider_name)
         all_configured = list(configured_names)
         custom_models = self.get_custom_models()
+        custom_provider_names = {
+            str(cm['id']): str(cm.get('display_name') or cm.get('base_url') or cm['id'])
+            for cm in custom_models
+            if cm.get('id')
+        }
+        
+        # Group custom models by display name to find primary ones
+        custom_groups = {}
         for cm in custom_models:
+            display_name = str(cm.get('display_name') or cm['id']).strip()
+            if display_name not in custom_groups:
+                custom_groups[display_name] = []
+            custom_groups[display_name].append(cm)
+            
+        primary_customs = [group[0] for group in custom_groups.values()]
+        
+        for cm in primary_customs:
             if cm['id'] not in all_configured:
                 all_configured.append(cm['id'])
                 
         disabled = self.get_disabled_providers()
         active_set = set(configured_names) - set(disabled)
-        for cm in custom_models:
+        for cm in primary_customs:
             if cm.get('enabled', True) is False and cm['id'] in active_set:
                 active_set.remove(cm['id'])
 
         disabled_models = self.get_disabled_models()
+        temp_disabled = temporary_disabled_models(self.health_path)
+        usable_keys = self.usable_model_keys()
 
         provider_models = {}
         for p_name in configured_names:
             if p_name.startswith('custom-'):
                 continue
             provider_models[p_name] = self.get_cached_provider_models(p_name)
+        for cm in primary_customs:
+            if cm.get('enabled', True) is not False and cm.get('verified') is True:
+                # Merge model hints from all custom models in its display group to have the union of all models
+                display_name = str(cm.get('display_name') or cm['id']).strip()
+                group_cms = custom_groups.get(display_name, [cm])
+                union_models = []
+                for g_cm in group_cms:
+                    if g_cm.get('enabled', True) is not False and g_cm.get('verified') is True:
+                        values = g_cm.get('models') if isinstance(g_cm.get('models'), list) else [g_cm.get('model')]
+                        for val in values:
+                            val_str = str(val or '').strip()
+                            if val_str and val_str not in union_models:
+                                union_models.append(val_str)
+                provider_models[str(cm['id'])] = union_models
 
         candidates = build_auto_candidates(
             requested_model=None,
@@ -616,13 +1311,17 @@ class ProxyService:
             now_ts=int(time.time()),
             ttl_seconds=self.health_ttl_seconds,
             manual_order=manual_order,
-            provider_models=provider_models
+            disabled_models=disabled_models,
+            provider_models=provider_models,
         )
         stats = []
         for i, c in enumerate(candidates):
             key = f"{c.provider}/{c.model}"
             entry = health.get(key, {})
             probe = probe_results.get(key, {})
+            analysis = analysis_stats.get(key, {})
+            chat_candidate = is_chat_candidate_model(c.provider, c.model)
+            temporary_disabled = temp_disabled.get(key, {})
             probe_ok = probe.get('ok') if isinstance(probe, dict) else None
             
             # Use freellmapi Bandit logic for display!
@@ -644,15 +1343,31 @@ class ProxyService:
             headroom = headroom_factor(remaining_req)
             
             score = combine_score(reliability, speed, intel, headroom, 1.0, BANDIT_PRESETS['balanced'])
+            route_priority = route_priority_sort_key(c.provider, c.model, entry)
             
             limits = get_model_limits(c.provider, c.model)
             
+            p_display = custom_provider_names.get(c.provider, c.provider)
+            model_display = ''
+            model_key_display = c.model
+            if c.provider == 'qoder':
+                p_display = 'Qoder'
+                model_display = qoder_model_display_name(c.model)
+                model_key_display = qoder_model_key_display(c.model)
+            p_keys = self.get_provider_keys(c.provider)
+            if len(p_keys) > 1:
+                p_display = f"{p_display} (轮询)"
+                
             stats.append({
                 'provider': c.provider,
+                'provider_display': p_display,
                 'model': c.model,
+                'model_display': model_display,
+                'model_key_display': model_key_display,
                 'source': c.source,
                 'rank': c.rank,
                 'score': score,
+                'route_priority': [round(float(route_priority[0]), 6), round(float(route_priority[1]), 6), round(float(route_priority[2]), 6)],
                 'rel': int(reliability * 100),
                 'spd': int(speed * 100),
                 'int': int(intel * 100),
@@ -667,7 +1382,18 @@ class ProxyService:
                 'monthly_token_budget': limits['monthly_token_budget'],
                 'rpm_limit': limits['rpm_limit'],
                 'rpd_limit': limits['rpd_limit'],
-                'enabled': (c.provider in active_set) and (key not in disabled_models)
+                'enabled': (c.provider in active_set) and (key not in disabled_models),
+                'temporarily_disabled': key in temp_disabled,
+                'disabled_until': temporary_disabled.get('disabled_until') if isinstance(temporary_disabled, dict) else None,
+                'disabled_reason': temporary_disabled.get('disabled_reason') if isinstance(temporary_disabled, dict) else '',
+                'usage_count': analysis.get('usage_count', 0),
+                'success_count': analysis.get('success_count', 0),
+                'success_rate': analysis.get('success_rate'),
+                'avg_latency_ms': analysis.get('avg_latency_ms'),
+                'recent_error': analysis.get('recent_error', ''),
+                'analysis_status': analysis.get('analysis_status', 'ok'),
+                'hide_reason': analysis.get('hide_reason', ''),
+                'chat_candidate': chat_candidate,
             })
             
         # Keep the order of candidates (which respects manual_order and capabilities)
@@ -796,6 +1522,8 @@ class ProxyService:
 
         adapter = self.provider_adapter(provider_name)
         normalized_model_id, request_payload = self._sanitize_openai_forward_payload(provider_name, model_id, payload)
+        runtime_start = time.time()
+        self.mark_runtime_model_start(provider_name, normalized_model_id)
         prompt = self._extract_prompt(request_payload)
         requested_output_tokens = self._requested_output_tokens(request_payload)
         capabilities = get_model_capabilities(provider_name, normalized_model_id)
@@ -827,6 +1555,7 @@ class ProxyService:
                 stream_iter = None
         except ProviderError as exc:
             category = classify_error(0, str(exc)).category
+            self.mark_runtime_model_finish(provider_name, normalized_model_id, False, int((time.time() - runtime_start) * 1000), str(exc))
             return OpenAIForwardResult(
                 ok=False,
                 provider=provider_name,
@@ -842,12 +1571,14 @@ class ProxyService:
         if status < 400:
             upsert_health(provider_name, normalized_model_id, True, headers=headers, path=self.health_path)
             if upstream_stream:
-                return OpenAIForwardResult(ok=True, provider=provider_name, model=normalized_model_id, status=status, headers=headers, body=None, stream_chunks=stream_iter)
+                return OpenAIForwardResult(ok=True, provider=provider_name, model=normalized_model_id, status=status, headers=headers, body=None, stream_chunks=self._runtime_tracked_stream(stream_iter, provider_name, normalized_model_id, runtime_start))
+            self.mark_runtime_model_finish(provider_name, normalized_model_id, True, int((time.time() - runtime_start) * 1000), None)
             return OpenAIForwardResult(ok=True, provider=provider_name, model=normalized_model_id, status=status, headers=headers, body=body)
 
         error_body = b''.join(bytes(chunk) for chunk in stream_iter if chunk) if upstream_stream else body
         text = error_body.decode('utf-8', errors='ignore')
         failure = classify_error(status, text)
+        self.mark_runtime_model_finish(provider_name, normalized_model_id, False, int((time.time() - runtime_start) * 1000), text or f'upstream status {status}')
         upsert_health(provider_name, normalized_model_id, False, reason=failure.category, headers=headers, path=self.health_path)
         if self.debug_log is not None:
             self.debug_log(
@@ -874,6 +1605,21 @@ class ProxyService:
     def _extract_prompt(self, payload: JsonObject) -> str:
         from .prompt_utils import extract_prompt
         return extract_prompt(payload)
+
+    def _runtime_tracked_stream(self, stream: Iterable[bytes], provider_name: str, model_id: str, start_time: float) -> Iterable[bytes]:
+        ok = True
+        error: str | None = None
+        try:
+            for chunk in stream:
+                yield chunk
+        except Exception as exc:
+            ok = False
+            error = str(exc)
+            raise
+        finally:
+            if hasattr(stream, 'close'):
+                stream.close()
+            self.mark_runtime_model_finish(provider_name, model_id, ok, int((time.time() - start_time) * 1000), error)
 
     @staticmethod
     def _requested_output_tokens(payload: JsonObject) -> int | None:
