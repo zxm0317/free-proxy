@@ -10,14 +10,42 @@ class ProviderFailure:
     retryable: bool
 
 
+PERMANENT_UNAVAILABLE_CATEGORIES = {'auth', 'model_not_found'}
+
+
+def is_permanent_unavailable_category(category: str | None) -> bool:
+    return bool(category in PERMANENT_UNAVAILABLE_CATEGORIES)
+
+
 def classify_error(status: int, body_text: str) -> ProviderFailure:
     text = (body_text or '').lower()
     if any(token in text for token in ('maximum context length', 'context length exceeded', 'too many tokens', 'max tokens', 'maxoutputtokens', 'prompt is too long', 'payload too large')):
         return ProviderFailure('token_limit', '超过上下文或输出 token 限制', True)
-    if any(token in text for token in ('invalid api key', 'unauthorized', 'forbidden', 'permission denied')):
+    auth_tokens = (
+        'invalid api key',
+        'unauthorized',
+        'forbidden',
+        'permission denied',
+        'permission insufficient',
+        'access restricted',
+        'no permission',
+        'not authorized',
+        '\u65e0\u6548',
+        '\u6743\u9650\u4e0d\u8db3',
+    )
+    if any(token in text for token in auth_tokens) or ('api key' in text and any(token in text for token in ('invalid', '\u65e0\u6548', '\u6743\u9650', 'permission'))):
         return ProviderFailure('auth', 'API Key 无效或权限不足', False)
-    if any(token in text for token in ('model not found', 'unknown model', 'unsupported model', 'does not exist')):
-        return ProviderFailure('model_not_found', '模型不存在或路径错误', False)
+    model_unavailable_tokens = (
+        'model not found',
+        'unknown model',
+        'unsupported model',
+        'does not exist',
+        'not available',
+        'not supported',
+        'model unavailable',
+    )
+    if any(token in text for token in model_unavailable_tokens):
+        return ProviderFailure('model_not_found', '模型不存在或不可用', False)
     if any(token in text for token in ('quota exceeded', 'insufficient credits', 'billing', 'exceeded your current quota')):
         return ProviderFailure('quota', '额度不足', False)
     if any(token in text for token in ('rate limit', 'too many requests', 'retry later')):

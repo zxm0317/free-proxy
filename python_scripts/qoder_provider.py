@@ -20,6 +20,17 @@ from .provider_errors import ProviderError, ProviderHTTPError
 from .provider_transport import Transport, UrlLibTransport
 from .response_normalizer import sanitize_model_text
 
+
+def _trace_qoder(event: str, **fields: object) -> None:
+    parts = [f'event={event}']
+    for key, value in fields.items():
+        text = str(value)
+        if len(text) > 200:
+            text = text[:200] + '...'
+        parts.append(f'{key}={text}')
+    print('TRACE_QODER ' + ' '.join(parts), flush=True)
+
+
 QODER_LOGIN_URL = 'https://qoder.com/device/selectAccounts'
 QODER_DEVICE_TOKEN_URL = 'https://openapi.qoder.sh/api/v1/deviceToken/poll'
 QODER_USERINFO_URL = 'https://openapi.qoder.sh/api/v1/userinfo'
@@ -478,7 +489,9 @@ class QoderProviderAdapter:
         return model, body
 
     def _upstream_stream(self, payload: dict[str, Any]) -> tuple[str, int, dict[str, str], Iterable[bytes]]:
+        started_at = time.time()
         model, qoder_payload = self._build_payload(payload)
+        build_ms = int((time.time() - started_at) * 1000)
         plain = json.dumps(qoder_payload, ensure_ascii=False, separators=(',', ':')).encode('utf-8')
         encoded = qoder_encode_body(plain)
         headers = {
@@ -490,12 +503,27 @@ class QoderProviderAdapter:
             'Accept-Encoding': 'identity',
             **build_cosy_headers(encoded, QODER_CHAT_URL, self.account),
         }
+        request_started_at = time.time()
+        _trace_qoder(
+            'upstream_start',
+            model=model,
+            payload_build_ms=build_ms,
+            timeout_s=self.request_timeout_seconds,
+            bytes=len(encoded),
+        )
         status, response_headers, stream = self.transport.stream_request(
             'POST',
             QODER_CHAT_URL,
             headers,
             encoded,
             timeout=self.request_timeout_seconds,
+        )
+        _trace_qoder(
+            'upstream_headers',
+            model=model,
+            elapsed_ms=int((time.time() - request_started_at) * 1000),
+            total_ms=int((time.time() - started_at) * 1000),
+            status=status,
         )
         return model, status, response_headers, stream
 
@@ -594,11 +622,27 @@ class QoderProviderAdapter:
         return text
 
     def forward_chat(self, payload: dict[str, Any]) -> AdapterResponse:
+        started_at = time.time()
         model, status, headers, upstream = self._upstream_stream(payload)
         wrapped = self._wrap_stream(upstream, model)
         if bool(payload.get('stream')):
+            _trace_qoder(
+                'forward_stream',
+                model=model,
+                elapsed_ms=int((time.time() - started_at) * 1000),
+                status=status,
+            )
             return AdapterResponse(status, {'Content-Type': 'text/event-stream', **headers}, None, wrapped, 'text/event-stream')
+        collect_started_at = time.time()
         content = self._collect_stream_text(wrapped)
+        _trace_qoder(
+            'collect_done',
+            model=model,
+            collect_ms=int((time.time() - collect_started_at) * 1000),
+            total_ms=int((time.time() - started_at) * 1000),
+            status=status,
+            chars=len(content),
+        )
         body = {
             'id': f'chatcmpl-qoder-{uuid.uuid4().hex[:12]}',
             'object': 'chat.completion',

@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import json
 import time
+from datetime import datetime, timedelta
 from dataclasses import dataclass
 
-from .errors import classify_error
+from .errors import classify_error, is_permanent_unavailable_category
+from .config import settings
 from .fallback_policy import FallbackContext, decide_next_action
 from .provider_catalog import configured_provider_names, get_model_capabilities, get_provider
 from .provider_errors import ProviderError
@@ -26,6 +28,16 @@ class RelayAttemptResult:
     error: str | None
 
 
+def _trace_relay(event: str, **fields: object) -> None:
+    parts = [f'event={event}']
+    for key, value in fields.items():
+        text = str(value)
+        if len(text) > 200:
+            text = text[:200] + '...'
+        parts.append(f'{key}={text}')
+    print('TRACE_RELAY ' + ' '.join(parts), flush=True)
+
+
 class OpenAIRelay:
     def __init__(
         self,
@@ -40,7 +52,10 @@ class OpenAIRelay:
         usage_incrementer=None,
         manual_order_loader=None,
         disabled_models_loader=None,
+        allowed_models_loader=None,
         request_logger=None,
+        runtime_model_start=None,
+        runtime_model_finish=None,
     ) -> None:
         self.adapter_factory = adapter_factory
         self.health_loader = health_loader
@@ -52,7 +67,10 @@ class OpenAIRelay:
         self.usage_incrementer = usage_incrementer
         self.manual_order_loader = manual_order_loader
         self.disabled_models_loader = disabled_models_loader
+        self.allowed_models_loader = allowed_models_loader
         self.request_logger = request_logger
+        self.runtime_model_start = runtime_model_start
+        self.runtime_model_finish = runtime_model_finish
 
     def normalize(self, payload: dict[str, object]) -> ChatRequest:
         return normalize_chat_request(payload)
@@ -232,11 +250,33 @@ class OpenAIRelay:
         return payload
 
     def _adapter_response(self, provider: str, model: str, request: ChatRequest):
+        started_at = time.time()
         adapter = self.adapter_factory(provider)
+        _trace_relay(
+            'adapter_created',
+            provider=provider,
+            model=model,
+            elapsed_ms=int((time.time() - started_at) * 1000),
+        )
+        payload_started_at = time.time()
         payload = self._payload_for_candidate(provider, model, request)
+        _trace_relay(
+            'candidate_payload_built',
+            provider=provider,
+            model=model,
+            elapsed_ms=int((time.time() - payload_started_at) * 1000),
+        )
         if self.debug_log:
             self.debug_log('upstream_payload_debug', provider=provider, payload=json.dumps(payload, ensure_ascii=False))
         adapter_response = adapter.forward_chat(payload)
+        _trace_relay(
+            'adapter_forward_done',
+            provider=provider,
+            model=model,
+            elapsed_ms=int((time.time() - started_at) * 1000),
+            status=adapter_response.status,
+            stream=adapter_response.stream is not None,
+        )
         if get_provider(provider).format == 'gemini' and adapter_response.status < 400 and adapter_response.body is not None:
             body = adapter_response.body or b''
             parsed = json.loads(body.decode('utf-8'))
@@ -258,20 +298,31 @@ class OpenAIRelay:
             return
         self.health_updater(provider, model, ok, reason, headers)
 
+    def _log_request_async(
+        self,
+        provider: str,
+        model: str,
+        status: str,
+        input_tokens: int,
+        output_tokens: int,
+        latency_ms: int,
+        error: str | None = None,
+    ) -> None:
+        if self.request_logger is None:
+            return
+
+        def _write_log() -> None:
+            try:
+                self.request_logger(provider, model, status, input_tokens, output_tokens, latency_ms, error)
+            except Exception:
+                pass
+
+        import threading
+        threading.Thread(target=_write_log, daemon=True).start()
+
     @staticmethod
     def _prioritize_interactive_clients(candidates: list[CandidateTarget], request: ChatRequest) -> list[CandidateTarget]:
-        client_hint = str(request.raw_payload.get('client_hint', '')).strip().lower()
-        if client_hint not in {'opencode', 'openclaw'}:
-            return candidates
-        provider_priority = {'longcat': 0}
-        return sorted(
-            candidates,
-            key=lambda item: (
-                provider_priority.get(item.provider, 1),
-                -int(get_model_capabilities(item.provider, item.model).get('default_output_tokens', 0) or 0),
-                item.rank,
-            ),
-        )
+        return candidates
 
     def _append_provider_listed_candidate(self, candidates: list[CandidateTarget], provider: str, insert_at: int) -> list[CandidateTarget]:
         ordered = list(candidates)
@@ -328,77 +379,189 @@ class OpenAIRelay:
 
     def handle_chat(self, request: ChatRequest) -> RelayResponse:
         overall_start = time.time()
-        preferred_model = ''
-        if callable(self.preferred_model_loader):
-            preferred_model = str(self.preferred_model_loader() or '').strip()
-        requested_model = request.requested_model or (preferred_model if preferred_model else None)
+        requested_model = request.requested_model
         manual_order = []
         if self.manual_order_loader:
+            step_start = time.time()
             manual_order = self.manual_order_loader()
+            _trace_relay('load_manual_order', elapsed_ms=int((time.time() - step_start) * 1000), count=len(manual_order))
         disabled_models = []
         if callable(self.disabled_models_loader):
+            step_start = time.time()
             disabled_models = self.disabled_models_loader()
+            _trace_relay('load_disabled_models', elapsed_ms=int((time.time() - step_start) * 1000), count=len(disabled_models))
+        allowed_models = None
+        if callable(self.allowed_models_loader):
+            step_start = time.time()
+            loaded_allowed = self.allowed_models_loader()
+            allowed_models = set(loaded_allowed or [])
+            _trace_relay('load_allowed_models', elapsed_ms=int((time.time() - step_start) * 1000), count=len(allowed_models))
 
+        step_start = time.time()
+        configured_providers = self.configured_providers_loader()
+        _trace_relay('load_configured_providers', elapsed_ms=int((time.time() - step_start) * 1000), count=len(configured_providers), providers=','.join(configured_providers))
+        step_start = time.time()
+        health_state = self.health_loader()
+        _trace_relay('load_health', elapsed_ms=int((time.time() - step_start) * 1000), count=len(health_state))
+        now_ts = int(time.time())
+        now_local = datetime.fromtimestamp(now_ts).astimezone()
+        daily_reset = now_local.replace(hour=6, minute=0, second=0, microsecond=0)
+        if now_local < daily_reset:
+            daily_reset -= timedelta(days=1)
+        daily_reset_ts = int(daily_reset.timestamp())
+        health_unavailable_models = [
+            key
+            for key, entry in health_state.items()
+            if (
+                '/' in key
+                and isinstance(entry, dict)
+                and (
+                    is_permanent_unavailable_category(str(entry.get('reason') or ''))
+                    or (
+                        isinstance(entry.get('disabled_until'), int)
+                        and int(entry['disabled_until']) > now_ts
+                    )
+                    or (
+                        str(entry.get('reason') or '') in {'network', 'server'}
+                        and isinstance(entry.get('checked_at'), int)
+                        and int(entry['checked_at']) >= daily_reset_ts
+                    )
+                )
+            )
+        ]
+        if health_unavailable_models:
+            disabled_models = list(dict.fromkeys([*disabled_models, *health_unavailable_models]))
+            _trace_relay('skip_unavailable_models', models=','.join(sorted(health_unavailable_models[:20])), count=len(health_unavailable_models))
+        step_start = time.time()
         candidates = self._prioritize_interactive_clients(
             build_auto_candidates(
                 requested_model=requested_model,
-                configured=self.configured_providers_loader(),
-                health=self.health_loader(),
-                now_ts=int(time.time()),
+                configured=configured_providers,
+                health=health_state,
+                now_ts=now_ts,
                 ttl_seconds=self.health_ttl_seconds,
                 manual_order=manual_order,
                 disabled_models=disabled_models,
+                allowed_models=allowed_models,
             ),
             request,
         )
+        _trace_relay('build_candidates', elapsed_ms=int((time.time() - step_start) * 1000), count=len(candidates))
         same_provider_attempts = 0
         current_provider = ''
         listed_loaded: set[str] = set()
         index = 0
         route_build_ms = int((time.time() - overall_start) * 1000)
         error_details = []
+        max_total_attempts = max(1, min(len(candidates), settings.max_fallback_attempts))
+        attempted_count = 0
+        _trace_relay(
+            'route_built',
+            requested_model=requested_model or 'auto',
+            candidates=len(candidates),
+            max_total_attempts=max_total_attempts,
+            route_build_ms=route_build_ms,
+            first_candidates=','.join(f'{item.provider}/{item.model}' for item in candidates[:10]),
+        )
         
         while index < len(candidates):
             candidate = candidates[index]
             index += 1
+            attempted_count += 1
             start_time = time.time()
+            if self.runtime_model_start:
+                try:
+                    self.runtime_model_start(candidate.provider, candidate.model)
+                except Exception:
+                    pass
             if candidate.provider == current_provider:
                 same_provider_attempts += 1
             else:
                 same_provider_attempts = 0
                 current_provider = candidate.provider
+            _trace_relay(
+                'attempt_start',
+                attempt=attempted_count,
+                candidate_index=index,
+                provider=candidate.provider,
+                model=candidate.model,
+                same_provider_attempts=same_provider_attempts,
+            )
             try:
                 adapter_response = self._adapter_response(candidate.provider, candidate.model, request)
             except ProviderError as exc:
                 error_msg = str(exc)
-                error_details.append(f"{candidate.provider}/{candidate.model}: {error_msg[:100]}")
-                failure = classify_error(0, error_msg)
-                self._record_health(candidate.provider, candidate.model, False, failure.category)
-                if self.request_logger:
+                elapsed_ms = int((time.time() - start_time) * 1000)
+                if self.runtime_model_finish:
                     try:
-                        self.request_logger(
-                            candidate.provider,
-                            candidate.model,
-                            'error',
-                            len(self._prompt_from_messages(request.messages)) // 4,
-                            0,
-                            int((time.time() - start_time) * 1000),
-                            error_msg
-                        )
+                        self.runtime_model_finish(candidate.provider, candidate.model, False, elapsed_ms, error_msg)
                     except Exception:
                         pass
-                if candidate.provider not in listed_loaded:
+                error_details.append(f"{candidate.provider}/{candidate.model}: {error_msg[:100]}")
+                failure = classify_error(0, error_msg)
+                _trace_relay(
+                    'attempt_error',
+                    attempt=attempted_count,
+                    provider=candidate.provider,
+                    model=candidate.model,
+                    elapsed_ms=elapsed_ms,
+                    category=failure.category,
+                    error=error_msg,
+                )
+                self._record_health(candidate.provider, candidate.model, False, failure.category)
+                self._log_request_async(
+                    candidate.provider,
+                    candidate.model,
+                    'error',
+                    len(self._prompt_from_messages(request.messages)) // 4,
+                    0,
+                    int((time.time() - start_time) * 1000),
+                    error_msg,
+                )
+                if failure.category != 'auth' and candidate.provider not in listed_loaded:
                     listed_loaded.add(candidate.provider)
                     candidates = self._append_provider_listed_candidate(candidates, candidate.provider, index)
-                decision = decide_next_action(FallbackContext(index, same_provider_attempts), RelayAttemptResult(False, candidate.provider, candidate.model, failure.category, None, None, str(exc)))
+                decision = decide_next_action(FallbackContext(attempted_count, same_provider_attempts, max_total_attempts=max_total_attempts), RelayAttemptResult(False, candidate.provider, candidate.model, failure.category, None, None, str(exc)))
+                _trace_relay(
+                    'fallback_decision',
+                    attempt=attempted_count,
+                    provider=candidate.provider,
+                    model=candidate.model,
+                    action=decision.action,
+                    category=failure.category,
+                )
                 if decision.action == 'stop':
                     break
                 continue
             if adapter_response.status < 400:
+                elapsed_ms = int((time.time() - start_time) * 1000)
+                _trace_relay(
+                    'attempt_ok',
+                    attempt=attempted_count,
+                    provider=candidate.provider,
+                    model=candidate.model,
+                    elapsed_ms=elapsed_ms,
+                    status=adapter_response.status,
+                    stream=adapter_response.stream is not None,
+                )
                 self._record_health(candidate.provider, candidate.model, True, None, headers=adapter_response.headers)
+                _trace_relay(
+                    'record_health_done',
+                    attempt=attempted_count,
+                    provider=candidate.provider,
+                    model=candidate.model,
+                    elapsed_ms=int((time.time() - start_time) * 1000),
+                )
                 if self.usage_incrementer:
                     import threading
                     threading.Thread(target=self.usage_incrementer, args=(candidate.provider, candidate.model), daemon=True).start()
+                    _trace_relay(
+                        'usage_increment_started',
+                        attempt=attempted_count,
+                        provider=candidate.provider,
+                        model=candidate.model,
+                        elapsed_ms=int((time.time() - start_time) * 1000),
+                    )
                 
                 if adapter_response.stream is not None:
                     headers_ms = int((time.time() - start_time) * 1000)
@@ -413,6 +576,13 @@ class OpenAIRelay:
                             for chunk in stream:
                                 if first:
                                     first_chunk_ms = int((time.time() - start_time_local) * 1000)
+                                    _trace_relay(
+                                        'stream_first_chunk',
+                                        provider=cand_provider,
+                                        model=cand_model,
+                                        stream_headers_ms=headers_ms_local,
+                                        first_chunk_ms=first_chunk_ms,
+                                    )
                                     if self.debug_log:
                                         self.debug_log('route_timing', candidate_order=index, winner=f"{cand_provider}/{cand_model}", stream_headers_ms=headers_ms_local, first_chunk_ms=first_chunk_ms, route_build_ms=route_build_ms)
                                     first = False
@@ -479,17 +649,29 @@ class OpenAIRelay:
                                     total_out_tokens = len("".join(accumulated_content)) // 4
                                     status = 'error' if has_error else 'success'
                                     latency_ms = int((time.time() - start_time_local) * 1000)
-                                    self.request_logger(
+                                    if self.runtime_model_finish:
+                                        try:
+                                            self.runtime_model_finish(cand_provider, cand_model, not has_error, latency_ms, error_msg)
+                                        except Exception:
+                                            pass
+                                    self._log_request_async(
                                         cand_provider,
                                         cand_model,
                                         status,
                                         len(self._prompt_from_messages(request.messages)) // 4,
                                         total_out_tokens,
                                         latency_ms,
-                                        error_msg
+                                        error_msg,
                                     )
                                 except Exception:
                                     pass
+                    _trace_relay(
+                        'stream_response_ready',
+                        provider=candidate.provider,
+                        model=candidate.model,
+                        attempt_elapsed_ms=int((time.time() - start_time) * 1000),
+                        total_ms=int((time.time() - overall_start) * 1000),
+                    )
                     return RelayResponse(
                         status=adapter_response.status,
                         headers={
@@ -502,17 +684,18 @@ class OpenAIRelay:
                     )
 
                 if adapter_response.body is None:
-                    if self.request_logger:
+                    self._log_request_async(
+                        candidate.provider,
+                        candidate.model,
+                        'success',
+                        len(self._prompt_from_messages(request.messages)) // 4,
+                        0,
+                        int((time.time() - start_time) * 1000),
+                        None,
+                    )
+                    if self.runtime_model_finish:
                         try:
-                            self.request_logger(
-                                candidate.provider,
-                                candidate.model,
-                                'success',
-                                len(self._prompt_from_messages(request.messages)) // 4,
-                                0,
-                                int((time.time() - start_time) * 1000),
-                                None
-                            )
+                            self.runtime_model_finish(candidate.provider, candidate.model, True, int((time.time() - start_time) * 1000), None)
                         except Exception:
                             pass
                     return RelayResponse(
@@ -531,6 +714,14 @@ class OpenAIRelay:
                     body=adapter_response.body,
                     stream=request.stream,
                 )
+                _trace_relay(
+                    'normalize_done',
+                    attempt=attempted_count,
+                    provider=candidate.provider,
+                    model=candidate.model,
+                    elapsed_ms=int((time.time() - start_time) * 1000),
+                    stream=resp.stream_chunks is not None,
+                )
                 if resp.stream_chunks is not None:
                     headers_ms = int((time.time() - start_time) * 1000)
                     def _timed_stream_local(stream, start_time_local, overall_start_local, headers_ms_local, cand_provider, cand_model):
@@ -542,6 +733,13 @@ class OpenAIRelay:
                             for chunk in stream:
                                 if first:
                                     first_chunk_ms = int((time.time() - start_time_local) * 1000)
+                                    _trace_relay(
+                                        'stream_first_chunk',
+                                        provider=cand_provider,
+                                        model=cand_model,
+                                        stream_headers_ms=headers_ms_local,
+                                        first_chunk_ms=first_chunk_ms,
+                                    )
                                     if self.debug_log:
                                         self.debug_log('route_timing', candidate_order=index, winner=f"{cand_provider}/{cand_model}", stream_headers_ms=headers_ms_local, first_chunk_ms=first_chunk_ms, route_build_ms=route_build_ms)
                                     first = False
@@ -574,14 +772,19 @@ class OpenAIRelay:
                                     total_out_tokens = len("".join(accumulated_content)) // 4
                                     status = 'error' if has_error else 'success'
                                     latency_ms = int((time.time() - start_time_local) * 1000)
-                                    self.request_logger(
+                                    if self.runtime_model_finish:
+                                        try:
+                                            self.runtime_model_finish(cand_provider, cand_model, not has_error, latency_ms, error_msg)
+                                        except Exception:
+                                            pass
+                                    self._log_request_async(
                                         cand_provider,
                                         cand_model,
                                         status,
                                         len(self._prompt_from_messages(request.messages)) // 4,
                                         total_out_tokens,
                                         latency_ms,
-                                        error_msg
+                                        error_msg,
                                     )
                                 except Exception:
                                     pass
@@ -596,27 +799,33 @@ class OpenAIRelay:
                         stream_chunks=_timed_stream_local(resp.stream_chunks, start_time, overall_start, headers_ms, candidate.provider, candidate.model)
                     )
                 else:
-                    if self.request_logger:
+                    try:
+                        latency_ms = int((time.time() - start_time) * 1000)
                         try:
-                            latency_ms = int((time.time() - start_time) * 1000)
-                            try:
-                                parsed = json.loads(resp.body.decode('utf-8'))
-                                input_tokens = parsed.get('usage', {}).get('prompt_tokens', 0)
-                                output_tokens = parsed.get('usage', {}).get('completion_tokens', 0)
-                            except Exception:
-                                input_tokens = len(self._prompt_from_messages(request.messages)) // 4
-                                output_tokens = 0
-                            self.request_logger(
-                                candidate.provider,
-                                candidate.model,
-                                'success',
-                                input_tokens,
-                                output_tokens,
-                                latency_ms,
-                                None
-                            )
+                            parsed = json.loads(resp.body.decode('utf-8'))
+                            input_tokens = parsed.get('usage', {}).get('prompt_tokens', 0)
+                            output_tokens = parsed.get('usage', {}).get('completion_tokens', 0)
                         except Exception:
-                            pass
+                            input_tokens = len(self._prompt_from_messages(request.messages)) // 4
+                            output_tokens = 0
+                        self._log_request_async(
+                            candidate.provider,
+                            candidate.model,
+                            'success',
+                            input_tokens,
+                            output_tokens,
+                            latency_ms,
+                            None,
+                        )
+                        _trace_relay(
+                            'request_logger_started',
+                            attempt=attempted_count,
+                            provider=candidate.provider,
+                            model=candidate.model,
+                            elapsed_ms=int((time.time() - start_time) * 1000),
+                        )
+                    except Exception:
+                        pass
                     resp = RelayResponse(
                         status=resp.status,
                         headers={
@@ -627,37 +836,78 @@ class OpenAIRelay:
                         body=resp.body,
                         stream_chunks=None
                     )
+                    if self.runtime_model_finish:
+                        try:
+                            self.runtime_model_finish(candidate.provider, candidate.model, True, int((time.time() - start_time) * 1000), None)
+                            _trace_relay(
+                                'runtime_finish_done',
+                                attempt=attempted_count,
+                                provider=candidate.provider,
+                                model=candidate.model,
+                                elapsed_ms=int((time.time() - start_time) * 1000),
+                            )
+                        except Exception:
+                            pass
+                _trace_relay(
+                    'return_response',
+                    attempt=attempted_count,
+                    provider=candidate.provider,
+                    model=candidate.model,
+                    elapsed_ms=int((time.time() - start_time) * 1000),
+                    total_ms=int((time.time() - overall_start) * 1000),
+                )
                 return resp
                 
             body_bytes = adapter_response.body or b''
             if not body_bytes and adapter_response.stream is not None:
                 body_bytes = b''.join(adapter_response.stream)
             failure = classify_error(adapter_response.status, body_bytes.decode('utf-8', errors='ignore'))
+            elapsed_ms = int((time.time() - start_time) * 1000)
+            _trace_relay(
+                'attempt_http_error',
+                attempt=attempted_count,
+                provider=candidate.provider,
+                model=candidate.model,
+                elapsed_ms=elapsed_ms,
+                status=adapter_response.status,
+                category=failure.category,
+                message=failure.message,
+            )
+            if self.runtime_model_finish:
+                try:
+                    self.runtime_model_finish(candidate.provider, candidate.model, False, elapsed_ms, failure.message)
+                except Exception:
+                    pass
             error_details.append(f"{candidate.provider}/{candidate.model} [HTTP {adapter_response.status}]: {failure.message[:200]}")
             if self.debug_log:
                 self.debug_log('upstream_error_details', provider=candidate.provider, model=candidate.model, status=adapter_response.status, raw_body=body_bytes.decode('utf-8', errors='ignore'))
             
-            if self.request_logger:
-                try:
-                    self.request_logger(
-                        candidate.provider,
-                        candidate.model,
-                        'error',
-                        len(self._prompt_from_messages(request.messages)) // 4,
-                        0,
-                        int((time.time() - start_time) * 1000),
-                        failure.message
-                    )
-                except Exception:
-                    pass
+            self._log_request_async(
+                candidate.provider,
+                candidate.model,
+                'error',
+                len(self._prompt_from_messages(request.messages)) // 4,
+                0,
+                int((time.time() - start_time) * 1000),
+                failure.message,
+            )
 
             if failure.category in ('server', 'network', 'rate_limit', 'auth', 'quota', 'model_not_found'):
                 self._record_health(candidate.provider, candidate.model, False, failure.category)
                 
-            if candidate.provider not in listed_loaded:
+            if failure.category != 'auth' and candidate.provider not in listed_loaded:
                 listed_loaded.add(candidate.provider)
                 candidates = self._append_provider_listed_candidate(candidates, candidate.provider, index)
-            decision = decide_next_action(FallbackContext(index, same_provider_attempts), RelayAttemptResult(False, candidate.provider, candidate.model, failure.category, adapter_response.status, None, failure.message))
+            decision = decide_next_action(FallbackContext(attempted_count, same_provider_attempts, max_total_attempts=max_total_attempts), RelayAttemptResult(False, candidate.provider, candidate.model, failure.category, adapter_response.status, None, failure.message))
+            _trace_relay(
+                'fallback_decision',
+                attempt=attempted_count,
+                provider=candidate.provider,
+                model=candidate.model,
+                action=decision.action,
+                category=failure.category,
+                status=adapter_response.status,
+            )
             if decision.action == 'stop':
                 break
         

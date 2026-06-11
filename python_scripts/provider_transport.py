@@ -91,6 +91,16 @@ class HttpxTransport:
     def _is_retryable_status(cls, status: int) -> bool:
         return status in cls._retryable_statuses
 
+    @staticmethod
+    def _httpx_timeout(timeout: int) -> httpx.Timeout:
+        timeout_seconds = max(1, timeout)
+        return httpx.Timeout(
+            connect=min(timeout_seconds, 15),
+            read=timeout_seconds,
+            write=min(timeout_seconds, 15),
+            pool=5,
+        )
+
 
     def request(
         self,
@@ -115,7 +125,7 @@ class HttpxTransport:
                 raise ProviderError(f'网络连接失败: {exc}') from exc
 
         client = self._get_client()
-        httpx_timeout = httpx.Timeout(connect=min(timeout, 15), read=max(timeout, 300), write=min(timeout, 15), pool=5)
+        httpx_timeout = self._httpx_timeout(timeout)
         try:
             response = client.request(method, url, headers=headers or {}, content=body, timeout=httpx_timeout)
         except httpx.RequestError as exc:
@@ -151,7 +161,7 @@ class HttpxTransport:
                 raise ProviderHTTPError(message=failure.message, status=status, category=failure.category)
             return status, response_headers, [response_body]
 
-        httpx_timeout = httpx.Timeout(connect=min(timeout, 15), read=max(timeout, 300), write=min(timeout, 15), pool=5)
+        httpx_timeout = self._httpx_timeout(timeout)
         client = self._get_client()
         request = client.build_request(method, url, headers=headers or {}, content=body, timeout=httpx_timeout)
         try:

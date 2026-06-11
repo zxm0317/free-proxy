@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import os
@@ -19,6 +20,7 @@ from starlette.concurrency import run_in_threadpool
 from .config import settings
 from .opencode_config import configure_opencode_provider, detect_opencode_config
 from .openclaw_config import configure_openclaw_model, detect_openclaw_config, list_backups, restore_backup
+from .errors import classify_error
 from .provider_errors import ProviderError
 from .service import ProxyService
 
@@ -41,6 +43,7 @@ else:
 
 _service: ProxyService | None = None
 _debug_enabled = False
+_automatic_retest_task: asyncio.Task | None = None
 
 
 def _debug_log(event: str, **fields: object) -> None:
@@ -54,20 +57,68 @@ def _debug_log(event: str, **fields: object) -> None:
     logger.info(' '.join(parts))
 
 
+def _trace_request(event: str, **fields: object) -> None:
+    parts = [f'event={event}']
+    for key, value in fields.items():
+        text = str(value)
+        if len(text) > 200:
+            text = text[:200] + '...'
+        parts.append(f'{key}={text}')
+    print('TRACE_REQUEST ' + ' '.join(parts), flush=True)
+
+
 def get_service() -> ProxyService:
     global _service
     if _service is None:
         _service = ProxyService(debug_log=_debug_log)
     return _service
 
+async def _automatic_retest_loop() -> None:
+    await asyncio.sleep(3)
+    while True:
+        try:
+            result = await asyncio.to_thread(get_service().automatic_retest_due_models)
+            checked = int(result.get('checked', 0))
+            if checked:
+                logger.info('Automatic model retest completed: checked=%s', checked)
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            logger.error('Automatic model retest failed: %s', exc)
+        await asyncio.sleep(300)
+
+
 @app.on_event("startup")
-def startup_event():
+async def startup_event():
+    global _automatic_retest_task
     try:
         logger.info('Initializing database connection and caching keys...')
-        get_service()
+        svc = get_service()
+        await asyncio.gather(
+            asyncio.to_thread(svc.get_manual_order),
+            asyncio.to_thread(svc.get_disabled_models),
+            asyncio.to_thread(svc.usable_model_keys),
+            asyncio.to_thread(svc.account_provider_accounts, 'qoder'),
+        )
+        if svc.account_provider_accounts('qoder'):
+            await asyncio.to_thread(svc.list_models, 'qoder')
         logger.info('Database cache initialized successfully.')
+        _automatic_retest_task = asyncio.create_task(_automatic_retest_loop())
     except Exception as exc:
         logger.error(f"Startup initialization failed: {exc}")
+
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    global _automatic_retest_task
+    if _automatic_retest_task is None:
+        return
+    _automatic_retest_task.cancel()
+    try:
+        await _automatic_retest_task
+    except asyncio.CancelledError:
+        pass
+    _automatic_retest_task = None
 
 _security = HTTPBearer(auto_error=False)
 
@@ -579,7 +630,8 @@ async def test_model(request: Request):
                 'ok': False,
                 'status': status_code,
                 'latency_ms': latency,
-                'error': result.error or '探测失败'
+                'error': result.error or '探测失败',
+                'category': result.category or classify_error(status_code, result.error or '').category,
             }
     except TimeoutError:
         latency = int((time.time() - start_time) * 1000)
@@ -588,16 +640,19 @@ async def test_model(request: Request):
             'ok': False,
             'status': 504,
             'latency_ms': latency,
-            'error': '探测超时'
+            'error': '探测超时',
+            'category': 'network',
         }
     except Exception as exc:
         latency = int((time.time() - start_time) * 1000)
+        category = classify_error(500, str(exc)).category
         await run_in_threadpool(svc.record_model_probe_result, model_key, ok=False, latency_ms=latency, status=500, error=str(exc))
         return {
             'ok': False,
             'status': 500,
             'latency_ms': latency,
-            'error': str(exc)
+            'error': str(exc),
+            'category': category,
         }
 
 
@@ -798,8 +853,20 @@ async def qoder_chat_completions(request: Request):
 
 @app.post('/v1/chat/completions')
 async def openai_chat_completions(request: Request):
+    request_start = time.time()
+    _trace_request(
+        'chat_start',
+        path=request.url.path,
+        client=request.client.host if request.client else 'unknown',
+        user_agent=request.headers.get('User-Agent', '')[:120],
+    )
     # Need to read body manually for logging before auth
     body_bytes = await request.body()
+    _trace_request(
+        'body_read',
+        elapsed_ms=int((time.time() - request_start) * 1000),
+        bytes=len(body_bytes),
+    )
     # Mock request.body() so subsequent calls still work
     async def _mock_receive():
         return {"type": "http.request", "body": body_bytes}
@@ -807,16 +874,39 @@ async def openai_chat_completions(request: Request):
     
     auth_res = await check_auth_openai(request)
     if isinstance(auth_res, JSONResponse):
+        _trace_request(
+            'auth_failed',
+            elapsed_ms=int((time.time() - request_start) * 1000),
+            status=auth_res.status_code,
+        )
         await _log_debug_request(request, body_bytes, f"Auth Failed: {auth_res.body}")
         return auth_res
+    _trace_request('auth_ok', elapsed_ms=int((time.time() - request_start) * 1000))
     
     payload, error_response = await _read_json_payload(request, openai=True)
     if error_response is not None:
+        _trace_request(
+            'json_failed',
+            elapsed_ms=int((time.time() - request_start) * 1000),
+            status=error_response.status_code,
+        )
         await _log_debug_request(request, body_bytes, f"JSON Parse Failed: {error_response.body}")
         return error_response
+    _trace_request(
+        'json_ok',
+        elapsed_ms=int((time.time() - request_start) * 1000),
+        model=payload.get('model') if isinstance(payload, dict) else 'none',
+        stream=payload.get('stream') if isinstance(payload, dict) else 'none',
+    )
         
     await _log_debug_request(request, body_bytes, "Success /v1/chat/completions")
-    print("DEBUG_PAYLOAD:", json.dumps(payload, ensure_ascii=True)[:1000], flush=True)
+    messages = payload.get('messages') if isinstance(payload, dict) else None
+    _trace_request(
+        'payload_summary',
+        model=payload.get('model') if isinstance(payload, dict) else 'none',
+        stream=payload.get('stream') if isinstance(payload, dict) else 'none',
+        message_count=len(messages) if isinstance(messages, list) else 0,
+    )
     user_agent = request.headers.get('User-Agent', '')
     client_hint = 'opencode' if 'opencode' in user_agent.lower() else 'openclaw' if 'openclaw' in user_agent.lower() else ''
     try:
@@ -826,13 +916,28 @@ async def openai_chat_completions(request: Request):
         relay = svc.openai_relay()
         req = relay.normalize(payload)
     except ValueError as exc:
+        _trace_request(
+            'normalize_failed',
+            elapsed_ms=int((time.time() - request_start) * 1000),
+            error=str(exc),
+        )
         error_code = 'model_deprecated' if 'no longer supported' in str(exc) else None
         return JSONResponse(
             {'error': {'message': str(exc), 'type': 'invalid_request_error', 'param': None, 'code': error_code}},
             status_code=400,
         )
 
-    result = await run_in_threadpool(relay.handle_chat, req)
+    relay_start = time.time()
+    result = await asyncio.to_thread(relay.handle_chat, req)
+    _trace_request(
+        'relay_done',
+        relay_ms=int((time.time() - relay_start) * 1000),
+        total_ms=int((time.time() - request_start) * 1000),
+        status=result.status,
+        stream=result.stream_chunks is not None,
+        routed_via=result.headers.get('X-Routed-Via') if result.headers else 'none',
+        fallback_attempts=result.headers.get('X-Fallback-Attempts') if result.headers else 'none',
+    )
 
     if result.stream_chunks is not None:
         headers = {
@@ -850,6 +955,12 @@ async def openai_chat_completions(request: Request):
             headers=headers,
         )
     if result.body is not None:
+        _trace_request(
+            'chat_response',
+            total_ms=int((time.time() - request_start) * 1000),
+            status=result.status,
+            bytes=len(result.body),
+        )
         return JSONResponse(content=json.loads(result.body), status_code=result.status or 200, headers=dict(result.headers))
         return JSONResponse(content=b'', status_code=result.status or 200)
 
@@ -896,7 +1007,11 @@ async def openai_legacy_completions(request: Request):
     await _log_debug_request(request, body_bytes, "Success /v1/completions")
     if error_response is not None:
         return error_response
-    print("DEBUG_PAYLOAD (legacy):", json.dumps(payload, ensure_ascii=False)[:1000], flush=True)
+    _trace_request(
+        'legacy_payload_summary',
+        model=payload.get('model') if isinstance(payload, dict) else 'none',
+        prompt_type=type(payload.get('prompt')).__name__ if isinstance(payload, dict) else 'none',
+    )
     
     # Translate legacy format to chat format
     prompt = payload.get('prompt', '')

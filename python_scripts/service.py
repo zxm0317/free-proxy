@@ -12,7 +12,7 @@ from pathlib import Path
 from .config import DOTENV_PATH, hydrate_env, load_dotenv
 from .account_provider_store import delete_account, load_accounts, public_account, save_accounts, upsert_account
 from .db_store import get_all_keys, get_key, init_db, upsert_key, increment_model_usage, get_model_usage_stats, get_manual_order, save_manual_order, log_request, get_model_probe_results, save_model_probe_result, delete_model_probe_results_for_provider
-from .errors import classify_error, remediation_suggestion
+from .errors import classify_error, is_permanent_unavailable_category, remediation_suggestion
 from .health_store import load_health, temporary_disabled_models, upsert_health, delete_health_for_provider
 from .openai_relay import OpenAIRelay
 from .preferred_model_store import load_preferred_model, save_preferred_model
@@ -132,7 +132,35 @@ class ProxyService:
         self._key_indices: dict[str, int] = {}
         self._key_select_lock = threading.Lock()
         self._account_login_sessions: dict[str, dict[str, object]] = {}
+        self._account_cache_lock = threading.Lock()
+        self._account_cache: dict[str, list[dict[str, object]]] = {}
+        self._route_cache_lock = threading.Lock()
+        self._route_cache_ttl_seconds = 3600.0
+        self._manual_order_cache: tuple[float, list[str]] | None = None
+        self._disabled_models_cache: tuple[float, list[str]] | None = None
+        self._usable_model_keys_cache: tuple[float, set[str]] | None = None
         self.sync_custom_providers()
+
+    def _route_cache_get(self, name: str) -> object | None:
+        with self._route_cache_lock:
+            cached = getattr(self, name)
+            if not cached:
+                return None
+            expires_at, value = cached
+            if time.time() >= expires_at:
+                setattr(self, name, None)
+                return None
+            return value
+
+    def _route_cache_set(self, name: str, value: object) -> None:
+        with self._route_cache_lock:
+            setattr(self, name, (time.time() + self._route_cache_ttl_seconds, value))
+
+    def _clear_route_cache(self) -> None:
+        with self._route_cache_lock:
+            self._manual_order_cache = None
+            self._disabled_models_cache = None
+            self._usable_model_keys_cache = None
 
     def sync_custom_providers(self) -> None:
         try:
@@ -319,7 +347,7 @@ class ProxyService:
             return QoderProviderAdapter(
                 account=account,
                 transport=self.transport,
-                request_timeout_seconds=max(self.request_timeout_seconds, 30),
+                request_timeout_seconds=min(max(self.request_timeout_seconds, 6), 8),
             )  # type: ignore[return-value]
 
         provider = get_provider(provider_name)
@@ -380,7 +408,22 @@ class ProxyService:
         )
 
     def account_provider_accounts(self, provider_name: str) -> list[dict[str, object]]:
-        return load_accounts(self.db_url, provider_name)
+        with self._account_cache_lock:
+            cached = self._account_cache.get(provider_name)
+            if cached is not None:
+                return [dict(account) for account in cached]
+        accounts = [dict(account) for account in load_accounts(self.db_url, provider_name)]
+        with self._account_cache_lock:
+            self._account_cache[provider_name] = [dict(account) for account in accounts]
+        return accounts
+
+    def _set_account_provider_cache(self, provider_name: str, accounts: list[dict[str, object]]) -> None:
+        with self._account_cache_lock:
+            self._account_cache[provider_name] = [dict(account) for account in accounts]
+
+    def _clear_account_provider_cache(self, provider_name: str) -> None:
+        with self._account_cache_lock:
+            self._account_cache.pop(provider_name, None)
 
     def _active_account_provider_accounts(self, provider_name: str) -> list[dict[str, object]]:
         return [
@@ -404,12 +447,20 @@ class ProxyService:
                 idx = 0
             account = accounts[idx]
             self._key_indices[idx_key] = (idx + 1) % len(accounts)
-        account['last_used_at'] = int(time.time())
+        now_ts = int(time.time())
+        previous_last_used = int(account.get('last_used_at') or 0)
+        account['last_used_at'] = now_ts
         all_accounts = self.account_provider_accounts(provider_name)
         for index, current in enumerate(all_accounts):
             if str(current.get('id')) == str(account.get('id')):
                 all_accounts[index] = account
-                save_accounts(self.db_url, provider_name, all_accounts)
+                self._set_account_provider_cache(provider_name, all_accounts)
+                if now_ts - previous_last_used >= 60:
+                    threading.Thread(
+                        target=save_accounts,
+                        args=(self.db_url, provider_name, all_accounts),
+                        daemon=True,
+                    ).start()
                 break
         return account
 
@@ -464,6 +515,7 @@ class ProxyService:
         if result.get('status') != 'ok':
             return {'ok': True, 'provider': provider_name, 'status': 'pending'}
         account = upsert_account(self.db_url, provider_name, dict(result.get('account') or {}))
+        self._clear_account_provider_cache(provider_name)
         self._account_login_sessions.pop(state, None)
         return {
             'ok': True,
@@ -476,6 +528,7 @@ class ProxyService:
         deleted = delete_account(self.db_url, provider_name, account_id)
         if not deleted:
             raise ProviderError('account not found')
+        self._clear_account_provider_cache(provider_name)
         if provider_name == 'qoder':
             self._clear_provider_model_state('qoder')
         return {'ok': True, 'provider': provider_name, 'id': account_id}
@@ -522,6 +575,9 @@ class ProxyService:
         return get_model_usage_stats(self.db_url)
 
     def usable_model_keys(self) -> set[str]:
+        cached = self._route_cache_get('_usable_model_keys_cache')
+        if isinstance(cached, set):
+            return set(cached)
         from .scoring import is_chat_candidate_model
         probe_results = get_model_probe_results(self.db_url)
         disabled_models = set(self.get_disabled_models())
@@ -538,13 +594,22 @@ class ProxyService:
             if not is_chat_candidate_model(provider, key.split('/', 1)[1]):
                 continue
             usable.add(key)
+        self._route_cache_set('_usable_model_keys_cache', set(usable))
         return usable
 
     def get_manual_order(self, bypass_cache: bool = False) -> list[str]:
-        return get_manual_order(self.db_url, bypass_cache)
+        if not bypass_cache:
+            cached = self._route_cache_get('_manual_order_cache')
+            if isinstance(cached, list):
+                return list(cached)
+        order = get_manual_order(self.db_url, bypass_cache)
+        if not bypass_cache:
+            self._route_cache_set('_manual_order_cache', list(order))
+        return order
 
     def save_manual_order(self, order: list[str]) -> None:
         save_manual_order(self.db_url, order)
+        self._clear_route_cache()
 
     def preferred_model(self) -> str | None:
         return load_preferred_model(self.preferred_model_path)
@@ -674,6 +739,7 @@ class ProxyService:
                     break
             upsert_key(self.db_url, 'custom_openai_models', json.dumps(models))
             self.sync_custom_providers()
+            self._clear_route_cache()
             return {'ok': True}
         else:
             disabled = self.get_disabled_providers()
@@ -684,6 +750,7 @@ class ProxyService:
                 if provider_name not in disabled:
                     disabled.append(provider_name)
             upsert_key(self.db_url, 'disabled_providers', json.dumps(disabled))
+            self._clear_route_cache()
             return {'ok': True}
 
     def _persistent_disabled_models(self) -> list[str]:
@@ -699,11 +766,15 @@ class ProxyService:
         return [str(item) for item in disabled]
 
     def get_disabled_models(self) -> list[str]:
+        cached = self._route_cache_get('_disabled_models_cache')
+        if isinstance(cached, list):
+            return list(cached)
         temp_disabled = temporary_disabled_models(self.health_path)
         merged = self._persistent_disabled_models()
         for key in temp_disabled:
             if key not in merged:
                 merged.append(key)
+        self._route_cache_set('_disabled_models_cache', list(merged))
         return merged
 
     def toggle_model(self, model_key: str, enabled: bool) -> dict[str, object]:
@@ -716,6 +787,7 @@ class ProxyService:
             if model_key not in disabled:
                 disabled.append(model_key)
         upsert_key(self.db_url, 'disabled_models', json.dumps(disabled))
+        self._clear_route_cache()
         return {'ok': True}
 
     def record_model_probe_result(
@@ -735,6 +807,84 @@ class ProxyService:
             status=status,
             error=error,
         )
+        if '/' not in model_key:
+            return
+        provider_name, model_id = model_key.split('/', 1)
+        from .scoring import is_chat_candidate_model
+        with self._route_cache_lock:
+            cached = self._usable_model_keys_cache
+            if cached is None:
+                return
+            _, cached_keys = cached
+            usable = set(cached_keys)
+            if ok and is_chat_candidate_model(provider_name, model_id):
+                usable.add(model_key)
+            else:
+                usable.discard(model_key)
+            self._usable_model_keys_cache = (time.time() + self._route_cache_ttl_seconds, usable)
+
+    @staticmethod
+    def daily_reset_timestamp() -> int:
+        now_local = time.localtime()
+        reset_time = time.mktime((
+            now_local.tm_year,
+            now_local.tm_mon,
+            now_local.tm_mday,
+            6,
+            0,
+            0,
+            now_local.tm_wday,
+            now_local.tm_yday,
+            now_local.tm_isdst,
+        ))
+        if time.time() < reset_time:
+            reset_time -= 24 * 60 * 60
+        return int(reset_time)
+
+    def automatic_retest_due_models(self) -> dict[str, object]:
+        reset_ts = self.daily_reset_timestamp()
+        stats = self.models_stats().get('models', [])
+        due_items = [
+            item
+            for item in stats
+            if isinstance(item, dict)
+            and (
+                item.get('probe_status') == 'recoverable'
+                or item.get('analysis_status') == 'retest_required'
+            )
+        ]
+
+        results: list[dict[str, object]] = []
+        for item in due_items:
+            provider_name = str(item.get('provider') or '')
+            model_id = str(item.get('model') or '')
+            if not provider_name or not model_id:
+                continue
+            model_key = f'{provider_name}/{model_id}'
+            checked_at = item.get('probe_checked_at')
+            if isinstance(checked_at, int) and checked_at >= reset_ts:
+                continue
+
+            started = time.time()
+            result = self.probe(provider_name, model_id, timeout=45 if provider_name == 'qoder' else 6)
+            latency_ms = int((time.time() - started) * 1000)
+            status = 200 if result.ok else (result.status if result.status is not None else 500)
+            self.record_model_probe_result(
+                model_key,
+                ok=result.ok,
+                latency_ms=latency_ms,
+                status=status,
+                error=result.error or '',
+            )
+            results.append({
+                'model_key': model_key,
+                'ok': result.ok,
+                'status': status,
+                'category': result.category,
+                'latency_ms': latency_ms,
+            })
+
+        return {'checked': len(results), 'results': results, 'reset_ts': reset_ts}
 
     def get_custom_models(self) -> list[dict[str, object]]:
         data_str = get_key(self.db_url, 'custom_openai_models')
@@ -1148,7 +1298,7 @@ class ProxyService:
                 providers.append({'provider': provider_name, 'error': str(exc), 'models': []})
         return {'providers': providers}
         
-    def get_cached_provider_models(self, provider_name: str) -> list[str]:
+    def get_cached_provider_models(self, provider_name: str, refresh: bool = False) -> list[str]:
         now = time.time()
         if not hasattr(self, '_models_cache'):
             self._models_cache = {}
@@ -1156,12 +1306,15 @@ class ProxyService:
             models, expiry = self._models_cache[provider_name]
             if now < expiry:
                 return models
+        hints = get_provider_model_hints(provider_name)
+        if not refresh:
+            self._models_cache[provider_name] = (hints, now + 60)
+            return hints
         try:
             adapter = self.provider_adapter(provider_name)
             models = adapter.list_models()
         except Exception:
-            from .provider_catalog import get_provider_model_hints
-            models = get_provider_model_hints(provider_name)
+            models = hints
         self._models_cache[provider_name] = (models, now + 300)
         return models
 
@@ -1246,6 +1399,7 @@ class ProxyService:
         manual_order = self.get_manual_order()
         probe_results = get_model_probe_results(self.db_url)
         analysis_stats = self._model_analysis_stats()
+        daily_reset_ts = self.daily_reset_timestamp()
         
         db_keys = get_all_keys(self.db_url)
         configured_names = configured_provider_names(db_keys)
@@ -1282,13 +1436,33 @@ class ProxyService:
 
         disabled_models = self.get_disabled_models()
         temp_disabled = temporary_disabled_models(self.health_path)
-        usable_keys = self.usable_model_keys()
+
+        known_model_keys: set[str] = set()
+        for key in manual_order:
+            if isinstance(key, str) and '/' in key:
+                known_model_keys.add(key)
+        for key in probe_results:
+            if isinstance(key, str) and '/' in key:
+                known_model_keys.add(key)
+        for key in health:
+            if isinstance(key, str) and '/' in key:
+                known_model_keys.add(key)
+        for key in disabled_models:
+            if isinstance(key, str) and '/' in key:
+                known_model_keys.add(key)
 
         provider_models = {}
         for p_name in configured_names:
-            if p_name.startswith('custom-'):
+            if p_name == 'qoder':
+                provider_models[p_name] = [
+                    key.split('/', 1)[1]
+                    for key in known_model_keys
+                    if key.startswith(f'{p_name}/')
+                ]
+            elif p_name.startswith('custom-'):
                 continue
-            provider_models[p_name] = self.get_cached_provider_models(p_name)
+            else:
+                provider_models[p_name] = self.get_cached_provider_models(p_name, refresh=True)
         for cm in primary_customs:
             if cm.get('enabled', True) is not False and cm.get('verified') is True:
                 # Merge model hints from all custom models in its display group to have the union of all models
@@ -1302,6 +1476,11 @@ class ProxyService:
                             val_str = str(val or '').strip()
                             if val_str and val_str not in union_models:
                                 union_models.append(val_str)
+                for key in known_model_keys:
+                    if key.startswith(f"{cm['id']}/"):
+                        val_str = key.split('/', 1)[1]
+                        if val_str and val_str not in union_models:
+                            union_models.append(val_str)
                 provider_models[str(cm['id'])] = union_models
 
         candidates = build_auto_candidates(
@@ -1315,6 +1494,7 @@ class ProxyService:
             provider_models=provider_models,
         )
         stats = []
+        provider_key_counts: dict[str, int] = {}
         for i, c in enumerate(candidates):
             key = f"{c.provider}/{c.model}"
             entry = health.get(key, {})
@@ -1322,7 +1502,51 @@ class ProxyService:
             analysis = analysis_stats.get(key, {})
             chat_candidate = is_chat_candidate_model(c.provider, c.model)
             temporary_disabled = temp_disabled.get(key, {})
+            is_temporarily_disabled = key in temp_disabled
             probe_ok = probe.get('ok') if isinstance(probe, dict) else None
+            probe_error = str(probe.get('error') or '') if isinstance(probe, dict) else ''
+            probe_status_code = probe.get('status') if isinstance(probe, dict) else None
+            probe_category = ''
+            if probe_ok is False:
+                try:
+                    probe_category = classify_error(int(probe_status_code or 0), probe_error).category
+                except Exception:
+                    probe_category = classify_error(0, probe_error).category
+            health_reason = str(entry.get('reason') or '') if isinstance(entry, dict) else ''
+            is_unavailable_model = (
+                is_permanent_unavailable_category(health_reason)
+                or is_permanent_unavailable_category(probe_category)
+            )
+            is_recoverable_model = (
+                not is_unavailable_model
+                and (
+                    probe_ok is False
+                    or (entry.get('ok') is False and bool(health_reason))
+                )
+            )
+            unavailable_error = ''
+            if is_unavailable_model:
+                reason_for_label = health_reason or probe_category
+                unavailable_error = 'API Key 无效或权限不足' if reason_for_label == 'auth' else '模型不存在或不可用'
+            probe_status = (
+                'failed' if is_unavailable_model
+                else 'recoverable' if is_recoverable_model
+                else 'success' if probe_ok is True
+                else 'untested'
+            )
+            is_failed_probe = probe_status == 'failed'
+            analysis_status = str(analysis.get('analysis_status') or 'ok')
+            hide_reason = str(analysis.get('hide_reason') or '')
+            probe_checked_at = probe.get('checked_at') if isinstance(probe.get('checked_at'), int) else None
+            verified_after_reset = probe_ok is True and isinstance(probe_checked_at, int) and probe_checked_at >= daily_reset_ts
+            if analysis_status == 'hidden':
+                if verified_after_reset:
+                    analysis_status = 'ok'
+                    hide_reason = ''
+                elif not is_unavailable_model:
+                    analysis_status = 'retest_required'
+                    hide_reason = f'{hide_reason} · 等待今日复测' if hide_reason else '等待今日复测'
+            is_currently_callable = probe_status == 'success' and analysis_status == 'ok'
             
             # Use freellmapi Bandit logic for display!
             success_streak = int(entry.get('success_streak', 0)) if isinstance(entry, dict) else 0
@@ -1354,8 +1578,9 @@ class ProxyService:
                 p_display = 'Qoder'
                 model_display = qoder_model_display_name(c.model)
                 model_key_display = qoder_model_key_display(c.model)
-            p_keys = self.get_provider_keys(c.provider)
-            if len(p_keys) > 1:
+            if c.provider not in provider_key_counts:
+                provider_key_counts[c.provider] = len(self.get_provider_keys(c.provider))
+            if provider_key_counts[c.provider] > 1:
                 p_display = f"{p_display} (轮询)"
                 
             stats.append({
@@ -1373,17 +1598,19 @@ class ProxyService:
                 'int': int(intel * 100),
                 'headroom': float(f"{headroom:.2f}"),
                 'ok': entry.get('ok') if isinstance(entry, dict) else None,
-                'probe_status': 'success' if probe_ok is True else 'failed' if probe_ok is False else 'untested',
+                'probe_status': probe_status,
                 'latency_ms': probe.get('latency_ms') if isinstance(probe.get('latency_ms'), int) else None,
-                'probe_checked_at': probe.get('checked_at') if isinstance(probe.get('checked_at'), int) else None,
-                'probe_error': str(probe.get('error') or '') if isinstance(probe, dict) else '',
+                'probe_checked_at': probe_checked_at,
+                'probe_error': unavailable_error or probe_error,
+                'probe_category': health_reason or probe_category,
                 'rate_limits': rate_limits,
                 'observations': success_streak + failure_streak,
                 'monthly_token_budget': limits['monthly_token_budget'],
                 'rpm_limit': limits['rpm_limit'],
                 'rpd_limit': limits['rpd_limit'],
-                'enabled': (c.provider in active_set) and (key not in disabled_models),
-                'temporarily_disabled': key in temp_disabled,
+                'enabled': (c.provider in active_set) and (key not in disabled_models) and not is_temporarily_disabled and is_currently_callable,
+                'manually_enabled': (c.provider in active_set) and (key not in disabled_models) and not is_failed_probe,
+                'temporarily_disabled': is_temporarily_disabled,
                 'disabled_until': temporary_disabled.get('disabled_until') if isinstance(temporary_disabled, dict) else None,
                 'disabled_reason': temporary_disabled.get('disabled_reason') if isinstance(temporary_disabled, dict) else '',
                 'usage_count': analysis.get('usage_count', 0),
@@ -1391,8 +1618,8 @@ class ProxyService:
                 'success_rate': analysis.get('success_rate'),
                 'avg_latency_ms': analysis.get('avg_latency_ms'),
                 'recent_error': analysis.get('recent_error', ''),
-                'analysis_status': analysis.get('analysis_status', 'ok'),
-                'hide_reason': analysis.get('hide_reason', ''),
+                'analysis_status': analysis_status,
+                'hide_reason': hide_reason,
                 'chat_candidate': chat_candidate,
             })
             

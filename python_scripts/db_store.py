@@ -4,7 +4,6 @@ import logging
 import sqlite3
 import urllib.parse
 import time
-import logging
 
 logger = logging.getLogger(__name__)
 
@@ -20,14 +19,14 @@ try:
     has_psycopg2 = True
 except ImportError as e:
     has_psycopg2 = False
-    logger.error(f"psycopg2 import failed: {e}")
+    logger.debug(f"psycopg2 import failed: {e}")
 
 try:
     import pg8000.dbapi
     has_pg8000 = True
 except ImportError as e:
     has_pg8000 = False
-    logger.error(f"pg8000 import failed: {e}")
+    logger.debug(f"pg8000 import failed: {e}")
 
 # Persistent in-memory cache for all keys to ensure 0 database latency on reads.
 _local_cache: dict[str, str] = {}
@@ -358,6 +357,25 @@ def save_model_probe_result(
                 int(time.time()),
             ),
         )
+        adapter.commit()
+    finally:
+        adapter.close()
+
+def delete_model_probe_results_for_provider(db_url: str, provider_id: str) -> None:
+    raw = get_key(db_url, MODEL_PROBE_RESULTS_KEY)
+    if raw:
+        try:
+            data = json.loads(raw)
+        except Exception:
+            data = {}
+        if isinstance(data, dict):
+            filtered = {str(key): value for key, value in data.items() if not str(key).startswith(f'{provider_id}/')}
+            if len(filtered) != len(data):
+                upsert_key(db_url, MODEL_PROBE_RESULTS_KEY, json.dumps(filtered))
+    prefix = f'{provider_id}/%'
+    adapter = get_adapter(db_url)
+    try:
+        adapter.execute("DELETE FROM model_probe_results WHERE model_key LIKE %s", (prefix,))
         adapter.commit()
     finally:
         adapter.close()

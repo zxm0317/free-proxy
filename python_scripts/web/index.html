@@ -937,6 +937,13 @@
         input:checked + .slider:before {
             transform: translateX(16px);
         }
+        .switch input:disabled + .slider {
+            background-color: #d1d5db;
+            cursor: not-allowed;
+        }
+        .switch input:disabled + .slider:before {
+            background-color: #f8fafc;
+        }
 
         /* Tag Styles */
         .badge-tag {
@@ -1594,6 +1601,7 @@
 
         let currentModelsOrder = [];
         let showFailedModels = false;
+        let showRecoverableModels = false;
         let showUntestedModels = false;
         let showAnalysisHiddenModels = false;
         let dragSrcKey = null;
@@ -1632,6 +1640,24 @@
                 .replaceAll('>', '&gt;')
                 .replaceAll('"', '&quot;')
                 .replaceAll("'", '&#39;');
+        }
+
+        function formatDisabledUntil(ts) {
+            if (!ts) return '';
+            const date = new Date(Number(ts) * 1000);
+            if (Number.isNaN(date.getTime())) return '';
+            const month = String(date.getMonth() + 1).padStart(2, '0');
+            const day = String(date.getDate()).padStart(2, '0');
+            const hour = String(date.getHours()).padStart(2, '0');
+            const minute = String(date.getMinutes()).padStart(2, '0');
+            return `${month}-${day} ${hour}:${minute}`;
+        }
+
+        function disabledReasonLabel(reason) {
+            if (reason === 'auth') return 'Key 无效';
+            if (reason === 'quota') return '额度不足';
+            if (reason === 'rate_limit') return '限流';
+            return reason || '临时禁用';
         }
 
         function configuredProviders() {
@@ -1832,7 +1858,7 @@
 
         function playgroundAvailableModels() {
             return currentModelsOrder
-                .filter((item) => item && item.enabled !== false && item.probe_status === 'success' && item.analysis_status !== 'hidden')
+                .filter((item) => item && item.enabled !== false && item.probe_status === 'success' && item.analysis_status === 'ok')
                 .map((item) => ({
                     value: `${item.provider}/${item.model}`,
                     label: modelKeyLabel(item),
@@ -3257,15 +3283,22 @@
                         signal: controller.signal
                     });
                     const data = await res.json();
-                    item.probe_status = data.ok ? 'success' : 'failed';
+                    const category = data.category || '';
+                    item.probe_status = data.ok ? 'success' : (category === 'auth' || category === 'model_not_found' ? 'failed' : 'recoverable');
+                    item.probe_category = category;
                     item.latency_ms = Number.isFinite(data.latency_ms) ? data.latency_ms : null;
                     item.probe_checked_at = Math.floor(Date.now() / 1000);
                     item.probe_error = data.error || '';
+                    if (data.ok) {
+                        item.analysis_status = 'ok';
+                        item.hide_reason = '';
+                    }
                     const result = { item, success: Boolean(data.ok), latency: item.latency_ms || 999999 };
                     results.push(result);
                     return result;
                 } catch (err) {
-                    item.probe_status = 'failed';
+                    item.probe_status = 'recoverable';
+                    item.probe_category = 'network';
                     item.latency_ms = null;
                     item.probe_checked_at = Math.floor(Date.now() / 1000);
                     item.probe_error = err.name === 'AbortError' ? '测速超时，已跳过' : (err.message || '测速失败');
@@ -3343,6 +3376,48 @@
             }
         };
 
+        window.recoverModel = async function(modelId, checkbox) {
+            if (!checkbox || checkbox.dataset.testing === 'true') return;
+            checkbox.checked = false;
+            checkbox.disabled = true;
+            checkbox.dataset.testing = 'true';
+            showToast('正在单独测试该模型，成功后自动恢复...', 'info');
+            try {
+                const testRes = await fetch('/api/models/test', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ model_key: modelId })
+                });
+                const testData = await testRes.json();
+                if (!testRes.ok || !testData.ok) {
+                    const detail = testData.error ? `：${testData.error}` : '';
+                    showToast(`模型仍不可用${detail}`, 'error');
+                    return;
+                }
+
+                const toggleRes = await fetch('/api/models/toggle', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ model_id: modelId, enabled: true })
+                });
+                if (!toggleRes.ok) {
+                    showToast('模型测试成功，但恢复状态失败', 'error');
+                    return;
+                }
+
+                showToast(`模型已恢复，延迟 ${testData.latency_ms || 0} ms`, 'success');
+            } catch (err) {
+                console.error(err);
+                showToast('模型复测失败，请稍后重试', 'error');
+            } finally {
+                delete checkbox.dataset.testing;
+                await fetchModelsStats();
+                if (typeof loadStatuses === 'function') {
+                    await loadStatuses();
+                }
+            }
+        };
+
         window.discardManualChanges = function() {
             localModelsOrder = null;
             document.getElementById('floatingSaveBar').style.display = 'none';
@@ -3397,8 +3472,14 @@
             if (!dragSrcKey || dragSrcKey === targetKey) return;
             
             const baseList = localModelsOrder ? [...localModelsOrder] : [...currentModelsOrder];
-            const visibleList = baseList.filter((item) => item.probe_status === 'success' && item.analysis_status !== 'hidden');
-            const hiddenList = baseList.filter((item) => item.probe_status !== 'success' || item.analysis_status === 'hidden');
+            const visibleList = baseList.filter((item) =>
+                (item.probe_status === 'success' || item.probe_status === 'recoverable')
+                && item.analysis_status === 'ok'
+            );
+            const hiddenList = baseList.filter((item) =>
+                (item.probe_status !== 'success' && item.probe_status !== 'recoverable')
+                || item.analysis_status !== 'ok'
+            );
             const sourceIndex = visibleList.findIndex((item) => encodeURIComponent(`${item.provider}/${item.model}`) === dragSrcKey);
             const targetIndex = visibleList.findIndex((item) => encodeURIComponent(`${item.provider}/${item.model}`) === targetKey);
             if (sourceIndex < 0 || targetIndex < 0) return;
@@ -3530,6 +3611,7 @@
         function isBudgetAvailableModel(item) {
             return item
                 && item.enabled !== false
+                && item.temporarily_disabled !== true
                 && item.probe_status === 'success'
                 && Number.isFinite(item.latency_ms);
         }
@@ -3613,6 +3695,7 @@
         function formatProbeLatency(item) {
             if (item.probe_status === 'failed') return '未通过';
             if (Number.isFinite(item.latency_ms)) return `${Math.round(item.latency_ms)} ms`;
+            if (item.probe_status === 'recoverable') return '可恢复';
             return '未测';
         }
 
@@ -3639,11 +3722,17 @@
         function probeRank(item) {
             if (item.probe_status === 'success') return 0;
             if (item.probe_status === 'untested') return 1;
-            return 2;
+            if (item.probe_status === 'recoverable') return 2;
+            return 3;
         }
 
         window.toggleFailedModels = function() {
             showFailedModels = !showFailedModels;
+            renderModelsStatsTable();
+        };
+
+        window.toggleRecoverableModels = function() {
+            showRecoverableModels = !showRecoverableModels;
             renderModelsStatsTable();
         };
 
@@ -3742,17 +3831,17 @@
             `;
         }
 
-        function renderHiddenModelsSection(failedModels, untestedModels, analysisHiddenModels = []) {
+        function renderHiddenModelsSection(failedModels, recoverableModels, untestedModels, analysisHiddenModels = []) {
             const section = document.getElementById('failedModelsSection');
             if (!section) return;
-            if (!failedModels.length && !untestedModels.length && !analysisHiddenModels.length) {
+            if (!failedModels.length && !recoverableModels.length && !untestedModels.length && !analysisHiddenModels.length) {
                 section.innerHTML = '';
                 return;
             }
             section.innerHTML = `
                 <div style="display: flex; flex-direction: column; gap: 10px;">
                     ${renderHiddenModelTable(analysisHiddenModels, {
-                        title: '分析隐藏模型',
+                        title: '分析隐藏 / 待复测模型',
                         expanded: showAnalysisHiddenModels,
                         toggleFn: 'toggleAnalysisHiddenModels',
                         emptyText: '暂无分析隐藏模型',
@@ -3764,6 +3853,13 @@
                         toggleFn: 'toggleUntestedModels',
                         emptyText: '暂无未测速模型',
                         reasonFallback: '等待一键测速'
+                    })}
+                    ${renderHiddenModelTable(recoverableModels, {
+                        title: '可恢复错误模型',
+                        expanded: showRecoverableModels,
+                        toggleFn: 'toggleRecoverableModels',
+                        emptyText: '暂无可恢复错误模型',
+                        reasonFallback: '临时错误，稍后可重试'
                     })}
                     ${renderHiddenModelTable(failedModels, {
                         title: '不可用 / 未通过模型',
@@ -3786,17 +3882,21 @@
             if (activeList.length === 0) {
                 tbody.innerHTML = '<tr><td colspan="10" style="padding: 12px; text-align: center; color: var(--muted);">暂无模型排行数据</td></tr>'; 
                 renderPendingProbeSection([]);
-                renderHiddenModelsSection([], []);
+                renderHiddenModelsSection([], [], []);
                 return;
             }
             
             const failedModels = activeList.filter((item) => item.probe_status === 'failed');
-            const analysisHiddenModels = activeList.filter((item) => item.probe_status === 'success' && item.analysis_status === 'hidden');
-            const untestedModels = activeList.filter((item) => item.probe_status !== 'success' && item.probe_status !== 'failed');
+            const analysisHiddenModels = activeList.filter((item) => item.probe_status === 'success' && (item.analysis_status === 'hidden' || item.analysis_status === 'retest_required'));
+            const untestedModels = activeList.filter((item) => item.probe_status !== 'success' && item.probe_status !== 'failed' && item.probe_status !== 'recoverable');
             renderPendingProbeSection(untestedModels);
-            renderHiddenModelsSection(failedModels, [], analysisHiddenModels);
+            renderHiddenModelsSection(failedModels, [], [], analysisHiddenModels);
 
-            let displayList = activeList.filter((item) => item.probe_status === 'success' && item.analysis_status !== 'hidden' && item.chat_candidate !== false);
+            let displayList = activeList.filter((item) =>
+                (item.probe_status === 'success' || item.probe_status === 'recoverable')
+                && item.analysis_status === 'ok'
+                && item.chat_candidate !== false
+            );
             if (displayList.length === 0) {
                 tbody.innerHTML = '<tr><td colspan="10" style="padding: 12px; text-align: center; color: var(--muted);">暂无可调用模型。点击“一键测速”，或展开下方隐藏/未测速/未通过模型查看详情。</td></tr>'; 
                 return;
@@ -3825,7 +3925,17 @@
                     : `·`;
                 
                 const dragCursor = isManual ? 'grab' : 'default';
-                const rowOpacity = item.enabled ? '1.0' : '0.5';
+                const isTempDisabled = item.temporarily_disabled === true;
+                const isRecoverable = item.probe_status === 'recoverable';
+                const isAutoDisabled = isTempDisabled || isRecoverable;
+                const rowOpacity = item.enabled && !isAutoDisabled ? '1.0' : '0.5';
+                const disabledUntilText = formatDisabledUntil(item.disabled_until);
+                const tempDisabledBadge = isTempDisabled
+                    ? `<span class="badge-tag tag-penalty">${escapeHtml(disabledReasonLabel(item.disabled_reason))}${disabledUntilText ? ` · 禁用至 ${escapeHtml(disabledUntilText)}` : ''}</span>`
+                    : '';
+                const recoverableBadge = isRecoverable
+                    ? '<span class="badge-tag tag-penalty">可恢复错误 · 等待自动复测</span>'
+                    : '';
                 
                 const budgetStr = item.monthly_token_budget || '18M';
                 const formattedBudget = budgetStr.includes('M') 
@@ -3860,6 +3970,8 @@
                                 ${supportsTools ? '<span class="badge-tag tag-tools">工具</span>' : ''}
                                 ${item.observations > 0 ? `<span class="badge-tag tag-obs">${item.observations}次观察</span>` : ''}
                             </div>
+                            ${tempDisabledBadge ? `<div style="margin-top: 4px;">${tempDisabledBadge}</div>` : ''}
+                            ${recoverableBadge ? `<div style="margin-top: 4px;">${recoverableBadge}</div>` : ''}
                             <div style="font-size: 11px; color: var(--muted); opacity: 0.8; margin-top: 4px;">
                                 ${formattedBudget}/月 · ${item.rpm_limit || '10'}转/分 · ${item.rpd_limit || '50'}转/日
                             </div>
@@ -3912,8 +4024,8 @@
                         
                         <!-- Switch (iOS toggle) -->
                         <td style="padding: 12px; vertical-align: middle; text-align: right;">
-                            <label class="switch">
-                                <input type="checkbox" ${item.enabled ? 'checked' : ''} onchange="toggleModelEnabled('${item.provider}/${item.model}', this.checked)">
+                            <label class="switch" title="${isRecoverable ? '点击手动复测，成功后恢复' : (isTempDisabled ? escapeHtml(`${disabledReasonLabel(item.disabled_reason)}${disabledUntilText ? `，禁用至 ${disabledUntilText}` : ''}`) : '')}">
+                                <input type="checkbox" ${item.enabled && !isAutoDisabled ? 'checked' : ''} ${isTempDisabled ? 'disabled' : ''} onchange="${isRecoverable ? `recoverModel('${item.provider}/${item.model}', this)` : `toggleModelEnabled('${item.provider}/${item.model}', this.checked)`}">
                                 <span class="slider"></span>
                             </label>
                         </td>

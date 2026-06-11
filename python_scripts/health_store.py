@@ -5,6 +5,7 @@ import os
 import tempfile
 import threading
 import time
+from datetime import datetime, timedelta
 from copy import deepcopy
 from pathlib import Path
 
@@ -16,6 +17,22 @@ DEFAULT_HEALTH_PATH = DATA_DIR / 'model-health.json'
 HealthState = dict[str, dict[str, object]]
 _HEALTH_CACHE: TTLCache[str, HealthState] = TTLCache(maxsize=8, ttl=30)
 _HEALTH_LOCK = threading.Lock()
+
+
+def _next_local_midnight_ts(now_ts: int | None = None) -> int:
+    now = datetime.fromtimestamp(int(time.time()) if now_ts is None else int(now_ts)).astimezone()
+    tomorrow = now.date() + timedelta(days=1)
+    return int(datetime.combine(tomorrow, datetime.min.time(), tzinfo=now.tzinfo).timestamp())
+
+
+def temporary_disabled_models(path: Path | None = None, now_ts: int | None = None) -> dict[str, dict[str, object]]:
+    now = int(time.time()) if now_ts is None else int(now_ts)
+    disabled: dict[str, dict[str, object]] = {}
+    for key, entry in load_health(path).items():
+        until = entry.get('disabled_until') if isinstance(entry, dict) else None
+        if isinstance(until, int) and until > now:
+            disabled[key] = entry
+    return disabled
 
 
 def _clone_state(data: HealthState) -> HealthState:
@@ -59,6 +76,14 @@ def save_health(data: HealthState, path: Path | None = None) -> None:
             raise
 
 
+def delete_health_for_provider(provider_id: str, path: Path | None = None) -> None:
+    prefix = f'{provider_id}/'
+    state = load_health(path)
+    filtered = {key: value for key, value in state.items() if not key.startswith(prefix)}
+    if len(filtered) != len(state):
+        save_health(filtered, path)
+
+
 def upsert_health(
     provider: str,
     model: str,
@@ -82,6 +107,15 @@ def upsert_health(
                 if h_key.lower() == header_key:
                     rate_limits[header_key] = str(h_val)
 
+    disabled_until = previous.get('disabled_until') if isinstance(previous, dict) else None
+    disabled_reason = previous.get('disabled_reason') if isinstance(previous, dict) else None
+    if ok:
+        disabled_until = None
+        disabled_reason = None
+    elif reason in {'quota', 'rate_limit'}:
+        disabled_until = _next_local_midnight_ts(now_ts)
+        disabled_reason = reason
+
     state[key] = {
         'ok': ok,
         'reason': reason,
@@ -89,5 +123,7 @@ def upsert_health(
         'success_streak': previous_success + 1 if ok else 0,
         'failure_streak': previous_failure + 1 if not ok else 0,
         'rate_limits': rate_limits,
+        'disabled_until': disabled_until,
+        'disabled_reason': disabled_reason,
     }
     save_health(state, path)

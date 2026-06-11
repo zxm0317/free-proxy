@@ -15,6 +15,16 @@ from .request_limiter import RequestLimiterGate
 JsonObject = dict[str, object]
 
 
+def _trace_provider(event: str, **fields: object) -> None:
+    parts = [f'event={event}']
+    for key, value in fields.items():
+        text = str(value)
+        if len(text) > 200:
+            text = text[:200] + '...'
+        parts.append(f'{key}={text}')
+    print('TRACE_PROVIDER ' + ' '.join(parts), flush=True)
+
+
 @dataclass(frozen=True)
 class AdapterResponse:
     status: int
@@ -95,6 +105,14 @@ class ProviderAdapter:
             base_url = f'https://api.cloudflare.com/client/v4/accounts/{account_id}/ai/v1'
         try:
             self._reserve_request_slot()
+            _trace_provider(
+                'upstream_start',
+                provider=self.provider.name,
+                model=payload.get('model') if isinstance(payload, dict) else 'none',
+                method=method,
+                path=path,
+                timeout_s=timeout_value,
+            )
             status, headers, raw = self.transport.request(
                 method,
                 build_url(base_url, path, query),
@@ -105,6 +123,17 @@ class ProviderAdapter:
         except TimeoutError as exc:
             raise ProviderError(f'网络连接失败: {exc}') from exc
         elapsed_ms = int((time.time() - started_at) * 1000)
+        _trace_provider(
+            'upstream_finish',
+            provider=self.provider.name,
+            model=payload.get('model') if isinstance(payload, dict) else 'none',
+            method=method,
+            path=path,
+            timeout_s=timeout_value,
+            elapsed_ms=elapsed_ms,
+            status=status,
+            bytes=len(raw or b''),
+        )
         if self.debug_log is not None:
             self.debug_log(
                 'upstream_response',
@@ -191,6 +220,15 @@ class ProviderAdapter:
         started_at = time.time()
         try:
             self._reserve_request_slot()
+            _trace_provider(
+                'upstream_start',
+                provider=self.provider.name,
+                model=model_value if isinstance(model_value, str) else 'none',
+                method='POST',
+                path='/chat/completions',
+                timeout_s=timeout,
+                stream=False,
+            )
             status, headers, response_body = self.transport.request(
                 'POST',
                 build_url(self.provider.base_url, '/chat/completions', get_provider_required_query(self.provider.name)),
@@ -201,6 +239,18 @@ class ProviderAdapter:
         except TimeoutError as exc:
             raise ProviderError(f'网络连接失败: {exc}') from exc
         elapsed_ms = int((time.time() - started_at) * 1000)
+        _trace_provider(
+            'upstream_finish',
+            provider=self.provider.name,
+            model=model_value if isinstance(model_value, str) else 'none',
+            method='POST',
+            path='/chat/completions',
+            timeout_s=timeout,
+            stream=False,
+            elapsed_ms=elapsed_ms,
+            status=status,
+            bytes=len(response_body or b''),
+        )
         if self.debug_log is not None:
             self.debug_log(
                 'upstream_response',
@@ -234,6 +284,15 @@ class ProviderAdapter:
         started_at = time.time()
         try:
             self._reserve_request_slot()
+            _trace_provider(
+                'upstream_start',
+                provider=self.provider.name,
+                model=model_value if isinstance(model_value, str) else 'none',
+                method='POST',
+                path='/chat/completions',
+                timeout_s=timeout,
+                stream=True,
+            )
             status, headers, chunks = self.transport.stream_request(
                 'POST',
                 build_url(self.provider.base_url, '/chat/completions', get_provider_required_query(self.provider.name)),
@@ -244,6 +303,17 @@ class ProviderAdapter:
         except TimeoutError as exc:
             raise ProviderError(f'网络连接失败: {exc}') from exc
         elapsed_ms = int((time.time() - started_at) * 1000)
+        _trace_provider(
+            'upstream_headers',
+            provider=self.provider.name,
+            model=model_value if isinstance(model_value, str) else 'none',
+            method='POST',
+            path='/chat/completions',
+            timeout_s=timeout,
+            stream=True,
+            elapsed_ms=elapsed_ms,
+            status=status,
+        )
         if self.debug_log is not None:
             self.debug_log(
                 'upstream_response',
