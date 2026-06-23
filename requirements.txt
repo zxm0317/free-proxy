@@ -10,7 +10,8 @@ anyio==4.13.0
     # via
     #   httpx
     #   starlette
-    #   watchfiles
+asn1crypto==1.5.1
+    # via scramp
 cachetools==7.1.4
     # via free-proxy (pyproject.toml)
 certifi==2026.5.20
@@ -20,42 +21,34 @@ certifi==2026.5.20
     #   httpx
 cffi==2.0.0
     # via cryptography
-click==8.4.1
-    # via uvicorn
-colorama==0.4.6
-    # via
-    #   click
-    #   uvicorn
 cryptography==48.0.0
     # via free-proxy (pyproject.toml)
 fastapi==0.136.3
     # via free-proxy (pyproject.toml)
 h11==0.16.0
-    # via
-    #   httpcore
-    #   uvicorn
+    # via httpcore
 httpcore==1.0.9
     # via httpx
-httptools==0.8.0
-    # via uvicorn
 httpx==0.28.1
     # via free-proxy (pyproject.toml)
 idna==3.17
     # via
     #   anyio
     #   httpx
-psycopg-binary==3.3.4
+pg8000==1.31.5
     # via free-proxy (pyproject.toml)
+pycparser==3.0
+    # via cffi
 pydantic==2.13.4
     # via fastapi
 pydantic-core==2.46.4
     # via pydantic
-pycparser==3.0
-    # via cffi
-python-dotenv==1.2.2
-    # via uvicorn
-pyyaml==6.0.3
-    # via uvicorn
+python-dateutil==2.9.0.post0
+    # via pg8000
+scramp==1.4.8
+    # via pg8000
+six==1.17.0
+    # via python-dateutil
 starlette==1.2.0
     # via fastapi
 tenacity==9.1.4
@@ -70,13 +63,3 @@ typing-inspection==0.4.2
     # via
     #   fastapi
     #   pydantic
-uvicorn==0.48.0
-    # via free-proxy (pyproject.toml)
-watchfiles==1.2.0
-    # via uvicorn
-websockets==16.0
-    # via uvicorn
-psycopg==3.1.18
-psycopg2-binary==2.9.9
-pg8000==1.31.5
-scramp==1.4.8
