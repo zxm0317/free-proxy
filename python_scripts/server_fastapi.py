@@ -440,6 +440,16 @@ async def verify_provider_key(provider: str):
     return JSONResponse(result, status_code=200 if result.get('ok') else 400)
 
 
+@app.post('/api/provider-keys/{provider}/{key_id}/verify')
+async def verify_provider_key_by_id(provider: str, key_id: str):
+    svc = get_service()
+    try:
+        result = await run_in_threadpool(svc.verify_provider_key, provider, key_id)
+        return JSONResponse(result, status_code=200 if result.get('ok') else 400)
+    except ProviderError as exc:
+        return JSONResponse({'ok': False, 'provider': provider, 'error': str(exc)}, status_code=400)
+
+
 @app.post('/api/configure-openclaw')
 async def configure_openclaw(request: Request):
     payload, error_response = await _read_json_payload(request)
@@ -519,11 +529,38 @@ async def save_provider_key(provider: str, request: Request):
         return JSONResponse({'ok': False, 'error': str(exc)}, status_code=400)
 
 
+@app.post('/api/provider-keys/{provider}/{key_id}')
+async def save_provider_key_by_id(provider: str, key_id: str, request: Request):
+    payload, error_response = await _read_json_payload(request)
+    if error_response is not None:
+        return error_response
+    api_key = str(payload.get('api_key', '')).strip()
+    label = str(payload.get('label', '')).strip()
+    if not api_key:
+        return JSONResponse({'ok': False, 'error': 'missing api_key'}, status_code=400)
+    svc = get_service()
+    try:
+        result = svc.configure_provider_key(provider, api_key, label=label, key_id=key_id)
+        return result
+    except ProviderError as exc:
+        return JSONResponse({'ok': False, 'error': str(exc)}, status_code=400)
+
+
 @app.delete('/api/provider-keys/{provider}')
 async def delete_provider_key(provider: str):
     svc = get_service()
     try:
         result = svc.delete_provider_key(provider)
+        return result
+    except Exception as exc:
+        return JSONResponse({'ok': False, 'error': str(exc)}, status_code=500)
+
+
+@app.delete('/api/provider-keys/{provider}/{key_id}')
+async def delete_provider_key_by_id(provider: str, key_id: str):
+    svc = get_service()
+    try:
+        result = svc.delete_provider_key(provider, key_id)
         return result
     except Exception as exc:
         return JSONResponse({'ok': False, 'error': str(exc)}, status_code=500)
