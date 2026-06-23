@@ -1708,6 +1708,126 @@ class ProxyService:
         # Keep the order of candidates (which respects manual_order and capabilities)
         return {'models': stats, 'strategy': 'priority'}
 
+    def models_stats_fallback(self) -> dict[str, object]:
+        from .provider_catalog import get_provider_model_hints
+        from .scoring import synthetic_speed_score, synthetic_intelligence_score, get_model_limits, is_chat_candidate_model
+
+        try:
+            db_keys = get_all_keys(self.db_url)
+        except Exception:
+            logger.exception('models_stats_fallback config key load failed')
+            db_keys = {}
+
+        try:
+            configured_names = configured_provider_names(db_keys)
+        except Exception:
+            logger.exception('models_stats_fallback provider detection failed')
+            configured_names = []
+
+        try:
+            if self._active_account_provider_accounts('qoder') and 'qoder' not in configured_names:
+                configured_names.append('qoder')
+        except Exception:
+            logger.exception('models_stats_fallback qoder detection failed')
+
+        custom_provider_names: dict[str, str] = {}
+        provider_models: dict[str, list[str]] = {}
+        try:
+            custom_models = self.get_custom_models()
+        except Exception:
+            logger.exception('models_stats_fallback custom model load failed')
+            custom_models = []
+
+        custom_groups: dict[str, list[dict[str, object]]] = {}
+        for cm in custom_models:
+            if not isinstance(cm, dict) or not cm.get('id'):
+                continue
+            display_name = str(cm.get('display_name') or cm.get('id')).strip()
+            custom_groups.setdefault(display_name, []).append(cm)
+
+        for group in custom_groups.values():
+            primary = group[0]
+            provider_id = str(primary.get('id') or '').strip()
+            if not provider_id or primary.get('enabled', True) is False:
+                continue
+            models: list[str] = []
+            for cm in group:
+                if cm.get('enabled', True) is False or cm.get('verified') is False:
+                    continue
+                values = cm.get('models') if isinstance(cm.get('models'), list) else [cm.get('model')]
+                for value in values:
+                    model_id = str(value or '').strip()
+                    if model_id and model_id not in models:
+                        models.append(model_id)
+            if models:
+                configured_names.append(provider_id)
+                provider_models[provider_id] = models
+                custom_provider_names[provider_id] = str(primary.get('display_name') or primary.get('base_url') or provider_id)
+
+        stats: list[dict[str, object]] = []
+        seen: set[str] = set()
+        for provider_name in configured_names:
+            try:
+                hints = provider_models.get(provider_name) or get_provider_model_hints(provider_name)
+            except Exception:
+                logger.exception('models_stats_fallback hint load failed: %s', provider_name)
+                continue
+            for model_id in hints:
+                model_text = str(model_id or '').strip()
+                key = f'{provider_name}/{model_text}'
+                if not model_text or key in seen:
+                    continue
+                seen.add(key)
+                try:
+                    limits = get_model_limits(provider_name, model_text)
+                    speed = synthetic_speed_score(provider_name, model_text)
+                    intel = synthetic_intelligence_score(provider_name, model_text)
+                    chat_candidate = is_chat_candidate_model(provider_name, model_text)
+                except Exception:
+                    logger.exception('models_stats_fallback stat build failed: %s', key)
+                    continue
+                stats.append({
+                    'provider': provider_name,
+                    'provider_display': custom_provider_names.get(provider_name, 'Qoder' if provider_name == 'qoder' else provider_name),
+                    'model': model_text,
+                    'model_display': '',
+                    'model_key_display': model_text,
+                    'source': 'fallback',
+                    'rank': len(stats),
+                    'score': round((speed + intel + 0.6) / 3, 4),
+                    'route_priority': [round(float(intel), 6), round(float(speed), 6), 0.6],
+                    'rel': 60,
+                    'spd': int(speed * 100),
+                    'int': int(intel * 100),
+                    'headroom': 1.0,
+                    'ok': None,
+                    'probe_status': 'success',
+                    'latency_ms': None,
+                    'probe_checked_at': None,
+                    'probe_error': '',
+                    'probe_category': '',
+                    'rate_limits': {},
+                    'observations': 0,
+                    'monthly_token_budget': limits['monthly_token_budget'],
+                    'rpm_limit': limits['rpm_limit'],
+                    'rpd_limit': limits['rpd_limit'],
+                    'enabled': chat_candidate,
+                    'manually_enabled': chat_candidate,
+                    'temporarily_disabled': False,
+                    'disabled_until': None,
+                    'disabled_reason': '',
+                    'usage_count': 0,
+                    'success_count': 0,
+                    'success_rate': None,
+                    'avg_latency_ms': None,
+                    'recent_error': '',
+                    'analysis_status': 'ok',
+                    'hide_reason': '',
+                    'chat_candidate': chat_candidate,
+                })
+
+        return {'models': stats, 'strategy': 'priority', 'fallback': True}
+
     def resolve_openai_target(self, payload: JsonObject) -> ResolvedOpenAIRequest:
         raw_model = payload.get('model')
         raw_provider = payload.get('provider')
