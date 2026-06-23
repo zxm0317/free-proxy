@@ -11,6 +11,7 @@ dependencies = [
     "fastapi>=0.115.0",
     "httpx>=0.28.1",
     "pg8000>=1.31.5",
+    "psycopg-binary>=3.2.0",
     "tenacity>=9.0.0",
 ]
 

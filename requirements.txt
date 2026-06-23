@@ -37,6 +37,8 @@ idna==3.17
     #   httpx
 pg8000==1.31.5
     # via free-proxy (pyproject.toml)
+psycopg-binary==3.3.4
+    # via free-proxy (pyproject.toml)
 pycparser==3.0
     # via cffi
 pydantic==2.13.4

@@ -1451,18 +1451,23 @@ class ProxyService:
             if isinstance(key, str) and '/' in key:
                 known_model_keys.add(key)
 
+        import concurrent.futures
+        
         provider_models = {}
-        for p_name in configured_names:
+        def fetch_p(p_name: str) -> list[str]:
             if p_name == 'qoder':
-                provider_models[p_name] = [
-                    key.split('/', 1)[1]
-                    for key in known_model_keys
-                    if key.startswith(f'{p_name}/')
-                ]
+                return [k.split('/', 1)[1] for k in known_model_keys if k.startswith(f'{p_name}/')]
             elif p_name.startswith('custom-'):
-                continue
-            else:
-                provider_models[p_name] = self.get_cached_provider_models(p_name, refresh=True)
+                return []
+            return self.get_cached_provider_models(p_name, refresh=False)
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=min(20, max(1, len(configured_names)))) as executor:
+            futures = {executor.submit(fetch_p, p_name): p_name for p_name in configured_names}
+            for future in concurrent.futures.as_completed(futures):
+                try:
+                    provider_models[futures[future]] = future.result()
+                except Exception:
+                    provider_models[futures[future]] = []
         for cm in primary_customs:
             if cm.get('enabled', True) is not False and cm.get('verified') is True:
                 # Merge model hints from all custom models in its display group to have the union of all models
