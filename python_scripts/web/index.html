@@ -2155,7 +2155,7 @@
                         if (verify) {
                             if (verify.ok) {
                                 statusDotClass += ' healthy';
-                                statusText = '健康';
+                                statusText = '已验证';
                             } else {
                                 statusDotClass += ' error';
                                 statusText = '错误';
@@ -2186,7 +2186,7 @@
                                         <span class="keys-key-time" style="font-size: 10px; color: var(--muted);">${verifyTimeStr}</span>
                                     </div>
                                     <div class="keys-key-actions" style="display: flex; gap: 4px; margin-left: auto;">
-                                        <button onclick="verifyProviderDirectly('${provider.id}', '${key.id}', this)" style="padding: 2px 8px; font-size: 11px;">验证</button>
+                                        <button onclick="verifyProviderDirectly('${provider.id}', '${key.id}', this)" style="padding: 2px 8px; font-size: 11px;">${verify && verify.ok ? '已验证' : '验证'}</button>
                                         <button onclick="state.editing['${cacheKey}'] = true; renderProviderCards();" style="padding: 2px 8px; font-size: 11px;">编辑</button>
                                         <button class="remove" onclick="removeProviderKey('${provider.id}', '${key.id}')" style="padding: 2px 8px; font-size: 11px;">清除</button>
                                     </div>
