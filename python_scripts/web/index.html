@@ -2175,6 +2175,7 @@
                                     <span style="font-size: 11px; color: var(--text-muted); min-width: 60px;">${escapeHtml(key.label)}:</span>
                                     <input type="text" class="field" id="keys-edit-label-${provider.id}-${key.id}" placeholder="修改标签" value="${escapeHtml(key.label)}" autocomplete="off" style="width: 100px; font-size: 12px; padding: 6px 10px;">
                                     <input type="password" class="field" id="keys-edit-input-${provider.id}-${key.id}" placeholder="输入新的 API Key" autocomplete="off" style="flex: 1; font-size: 12px; padding: 6px 10px;">
+                                    ${provider.keyUrl ? `<a href="${provider.keyUrl}" target="_blank" rel="noreferrer" style="font-size: 11px; color: var(--primary); white-space: nowrap;">供应商地址</a>` : ''}
                                     <button class="btn btn-primary" onclick="saveEditedProviderKey('${provider.id}', '${key.id}', this)" style="padding: 4px 10px; font-size: 11px; border-radius: 6px;">保存</button>
                                     <button class="btn btn-ghost" onclick="state.editing['${cacheKey}'] = false; renderProviderCards();" style="padding: 4px 10px; font-size: 11px; border-radius: 6px;">取消</button>
                                 </div>
