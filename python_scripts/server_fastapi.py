@@ -329,7 +329,19 @@ async def get_usage_stats():
 @app.get('/api/models-stats')
 async def get_models_stats():
     svc = get_service()
-    return await run_in_threadpool(svc.models_stats)
+    try:
+        return await run_in_threadpool(svc.models_stats)
+    except Exception:
+        logger.exception('models-stats route failed')
+        return JSONResponse(
+            {
+                'ok': False,
+                'error': 'models_stats_failed',
+                'models': [],
+                'strategy': 'priority',
+            },
+            status_code=200,
+        )
 
 
 @app.get('/api/runtime/current-model')

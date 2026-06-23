@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import secrets
 import threading
@@ -27,6 +28,8 @@ from .token_limit_store import load_token_limits, upsert_token_limit
 from .token_policy import model_default_output_tokens, model_default_timeout_seconds, probe_output_tokens, response_token_budget, trim_prompt
 
 JsonObject = dict[str, object]
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -1392,11 +1395,49 @@ class ProxyService:
         return analysis
 
     def models_stats(self) -> dict[str, object]:
-        from .provider_routing import build_auto_candidates
+        from .provider_routing import CandidateTarget, build_auto_candidates
         from .qoder_provider import qoder_model_display_name, qoder_model_key_display
         from .scoring import expected_reliability, synthetic_speed_score, synthetic_intelligence_score, headroom_factor, combine_score, BANDIT_PRESETS, get_model_limits, route_priority_sort_key, is_chat_candidate_model
         health = load_health(self.health_path)
         import concurrent.futures
+
+        def future_result(future: concurrent.futures.Future, default: object, label: str) -> object:
+            try:
+                return future.result()
+            except Exception:
+                logger.exception('models_stats source failed: %s', label)
+                return default
+
+        def as_str_list(value: object) -> list[str]:
+            if not isinstance(value, list):
+                return []
+            result: list[str] = []
+            for item in value:
+                text = str(item or '').strip()
+                if text:
+                    result.append(text)
+            return result
+
+        def as_dict(value: object) -> dict[str, object]:
+            if not isinstance(value, dict):
+                return {}
+            return {str(key): item for key, item in value.items()}
+
+        def normalize_custom_models(value: object) -> list[dict[str, object]]:
+            models: list[dict[str, object]] = []
+            if not isinstance(value, list):
+                return models
+            for item in value:
+                if not isinstance(item, dict):
+                    continue
+                model = dict(item)
+                model_id = str(model.get('id') or '').strip()
+                if not model_id:
+                    continue
+                model['id'] = model_id
+                models.append(model)
+            return models
+
         with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
             f_manual = executor.submit(self.get_manual_order)
             f_probe = executor.submit(get_model_probe_results, self.db_url)
@@ -1404,11 +1445,14 @@ class ProxyService:
             f_keys = executor.submit(get_all_keys, self.db_url)
             f_custom = executor.submit(self.get_custom_models)
             
-            manual_order = f_manual.result()
-            probe_results = f_probe.result()
-            analysis_stats = f_analysis.result()
-            db_keys = f_keys.result()
-            custom_models = f_custom.result()
+            manual_order = as_str_list(future_result(f_manual, [], 'manual_order'))
+            probe_results = as_dict(future_result(f_probe, {}, 'probe_results'))
+            analysis_stats = as_dict(future_result(f_analysis, {}, 'analysis_stats'))
+            db_keys = {
+                str(key): str(value)
+                for key, value in as_dict(future_result(f_keys, {}, 'config_keys')).items()
+            }
+            custom_models = normalize_custom_models(future_result(f_custom, [], 'custom_models'))
             
         daily_reset_ts = self.daily_reset_timestamp()
         
@@ -1497,16 +1541,30 @@ class ProxyService:
                             union_models.append(val_str)
                 provider_models[str(cm['id'])] = union_models
 
-        candidates = build_auto_candidates(
-            requested_model=None,
-            configured=all_configured,
-            health=health,
-            now_ts=int(time.time()),
-            ttl_seconds=self.health_ttl_seconds,
-            manual_order=manual_order,
-            disabled_models=disabled_models,
-            provider_models=provider_models,
-        )
+        try:
+            candidates = build_auto_candidates(
+                requested_model=None,
+                configured=all_configured,
+                health=health,
+                now_ts=int(time.time()),
+                ttl_seconds=self.health_ttl_seconds,
+                manual_order=manual_order,
+                disabled_models=disabled_models,
+                provider_models=provider_models,
+            )
+        except Exception:
+            logger.exception('models_stats candidate build failed')
+            candidates = []
+            seen: set[tuple[str, str]] = set()
+            for provider_name in all_configured:
+                for model_id in provider_models.get(provider_name, []):
+                    model_text = str(model_id or '').strip()
+                    key = f'{provider_name}/{model_text}'
+                    pair = (provider_name, model_text)
+                    if not model_text or pair in seen or key in disabled_models:
+                        continue
+                    seen.add(pair)
+                    candidates.append(CandidateTarget(provider_name, model_text, 'provider_default', len(candidates)))
         stats = []
         provider_key_counts: dict[str, int] = {}
         for i, c in enumerate(candidates):
@@ -1514,6 +1572,12 @@ class ProxyService:
             entry = health.get(key, {})
             probe = probe_results.get(key, {})
             analysis = analysis_stats.get(key, {})
+            if not isinstance(entry, dict):
+                entry = {}
+            if not isinstance(probe, dict):
+                probe = {}
+            if not isinstance(analysis, dict):
+                analysis = {}
             chat_candidate = is_chat_candidate_model(c.provider, c.model)
             temporary_disabled = temp_disabled.get(key, {})
             is_temporarily_disabled = key in temp_disabled
@@ -1593,7 +1657,11 @@ class ProxyService:
                 model_display = qoder_model_display_name(c.model)
                 model_key_display = qoder_model_key_display(c.model)
             if c.provider not in provider_key_counts:
-                provider_key_counts[c.provider] = len(self.get_provider_keys(c.provider))
+                try:
+                    provider_key_counts[c.provider] = len(self.get_provider_keys(c.provider))
+                except Exception:
+                    logger.exception('models_stats provider key count failed: %s', c.provider)
+                    provider_key_counts[c.provider] = 0
             if provider_key_counts[c.provider] > 1:
                 p_display = f"{p_display} (轮询)"
                 

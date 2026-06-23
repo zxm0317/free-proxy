@@ -3567,15 +3567,43 @@
         async function fetchModelsStats() {
             try {
                 const res = await fetch('/api/models-stats');
-                const data = await res.json();
-                if (!data || !data.models) return;
+                const raw = await res.text();
+                let data = {};
+                try {
+                    data = raw ? JSON.parse(raw) : {};
+                } catch (parseErr) {
+                    throw new Error(`Invalid models response: ${raw.slice(0, 120)}`);
+                }
+                if (!res.ok) {
+                    throw new Error(data.error || `HTTP ${res.status}`);
+                }
+                if (!data || !Array.isArray(data.models)) {
+                    throw new Error(data && data.error ? data.error : 'Missing models list');
+                }
+                if (data.ok === false || data.error) {
+                    throw new Error(data.error || 'Models stats unavailable');
+                }
                 currentModelsOrder = data.models;
                 updatePendingProbeCount();
                 renderModelsStatsTable();
                 renderPlaygroundModels();
             } catch (err) {
                 console.error('fetchModelsStats error:', err);
+                showModelsStatsError(err && err.message ? err.message : 'load failed');
             }
+        }
+
+        function showModelsStatsError(message) {
+            currentModelsOrder = [];
+            localModelsOrder = null;
+            updatePendingProbeCount();
+            const tbody = document.getElementById('modelsStatsBody');
+            if (tbody) {
+                tbody.innerHTML = `<tr><td colspan="10" style="padding: 12px; text-align: center; color: var(--danger);">模型排行加载失败：${escapeHtml(message)}。请刷新或稍后重试。</td></tr>`;
+            }
+            renderPendingProbeSection([]);
+            renderHiddenModelsSection([], [], []);
+            renderPlaygroundModels();
         }
 
         function calculateScore(item, strategyKey) {
