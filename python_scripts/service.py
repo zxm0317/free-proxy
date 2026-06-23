@@ -1396,18 +1396,27 @@ class ProxyService:
         from .qoder_provider import qoder_model_display_name, qoder_model_key_display
         from .scoring import expected_reliability, synthetic_speed_score, synthetic_intelligence_score, headroom_factor, combine_score, BANDIT_PRESETS, get_model_limits, route_priority_sort_key, is_chat_candidate_model
         health = load_health(self.health_path)
-        manual_order = self.get_manual_order()
-        probe_results = get_model_probe_results(self.db_url)
-        analysis_stats = self._model_analysis_stats()
+        import concurrent.futures
+        with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
+            f_manual = executor.submit(self.get_manual_order)
+            f_probe = executor.submit(get_model_probe_results, self.db_url)
+            f_analysis = executor.submit(self._model_analysis_stats)
+            f_keys = executor.submit(get_all_keys, self.db_url)
+            f_custom = executor.submit(self.get_custom_models)
+            
+            manual_order = f_manual.result()
+            probe_results = f_probe.result()
+            analysis_stats = f_analysis.result()
+            db_keys = f_keys.result()
+            custom_models = f_custom.result()
+            
         daily_reset_ts = self.daily_reset_timestamp()
         
-        db_keys = get_all_keys(self.db_url)
         configured_names = configured_provider_names(db_keys)
         for provider_name in ('qoder',):
             if self._active_account_provider_accounts(provider_name) and provider_name not in configured_names:
                 configured_names.append(provider_name)
         all_configured = list(configured_names)
-        custom_models = self.get_custom_models()
         custom_provider_names = {
             str(cm['id']): str(cm.get('display_name') or cm.get('base_url') or cm['id'])
             for cm in custom_models
