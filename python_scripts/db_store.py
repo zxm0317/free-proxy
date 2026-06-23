@@ -44,6 +44,9 @@ class DBAdapter:
 
 class PostgresAdapter(DBAdapter):
     def __init__(self, db_url: str):
+        if 'supabase.com' in db_url and 'sslmode' not in db_url:
+            db_url += ('&' if '?' in db_url else '?') + 'sslmode=require'
+            
         self.is_psycopg2 = False
         if has_psycopg3:
             self.conn = psycopg.connect(db_url)

@@ -3448,6 +3448,48 @@
             }
         };
 
+        window.pinModelToTop = async function(modelKeyToken, button) {
+            if (button && button.disabled) return;
+            const modelKey = decodeURIComponent(modelKeyToken);
+            const baseList = localModelsOrder ? [...localModelsOrder] : [...currentModelsOrder];
+            const targetIndex = baseList.findIndex((item) => `${item.provider}/${item.model}` === modelKey);
+            if (targetIndex < 0) {
+                showToast('\u672a\u627e\u5230\u8981\u7f6e\u9876\u7684\u6a21\u578b', 'error');
+                return;
+            }
+            if (targetIndex === 0) {
+                showToast('\u5df2\u7ecf\u5728\u7b2c\u4e00\u4f4d', 'success');
+                return;
+            }
+
+            const target = baseList[targetIndex];
+            const nextOrder = [target, ...baseList.filter((_, index) => index !== targetIndex)];
+            localModelsOrder = nextOrder;
+            renderModelsStatsTable();
+            if (button) button.disabled = true;
+            try {
+                const orderStrings = nextOrder.map((item) => `${item.provider}/${item.model}`);
+                const res = await fetch('/api/manual-order', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ order: orderStrings })
+                });
+                if (!res.ok) {
+                    showToast('\u7f6e\u9876\u5931\u8d25', 'error');
+                    return;
+                }
+                showToast('\u5df2\u7f6e\u9876\u5e76\u4fdd\u5b58');
+                localModelsOrder = null;
+                document.getElementById('floatingSaveBar').style.display = 'none';
+                await fetchModelsStats();
+            } catch (err) {
+                console.error(err);
+                showToast('\u7f51\u7edc\u9519\u8bef\uff0c\u7f6e\u9876\u5931\u8d25', 'error');
+            } finally {
+                if (button) button.disabled = false;
+            }
+        };
+
         window.rowDragStart = function(event, modelKey) {
             if (currentStrategy !== 'priority') {
                 event.preventDefault();
@@ -4023,7 +4065,8 @@
                         </td>
                         
                         <!-- Switch (iOS toggle) -->
-                        <td style="padding: 12px; vertical-align: middle; text-align: right;">
+                        <td style="padding: 12px; vertical-align: middle; text-align: right; white-space: nowrap;">
+                            <button class="btn btn-secondary" style="padding: 4px 8px; font-size: 11px; margin-right: 8px;" onclick="pinModelToTop('${modelKeyToken}', this)" ${index === 0 ? 'disabled' : ''}>&#x7f6e;&#x9876;</button>
                             <label class="switch" title="${isRecoverable ? '点击手动复测，成功后恢复' : (isTempDisabled ? escapeHtml(`${disabledReasonLabel(item.disabled_reason)}${disabledUntilText ? `，禁用至 ${disabledUntilText}` : ''}`) : '')}">
                                 <input type="checkbox" ${item.enabled && !isAutoDisabled ? 'checked' : ''} ${isTempDisabled ? 'disabled' : ''} onchange="${isRecoverable ? `recoverModel('${item.provider}/${item.model}', this)` : `toggleModelEnabled('${item.provider}/${item.model}', this.checked)`}">
                                 <span class="slider"></span>

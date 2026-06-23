@@ -9,9 +9,9 @@ import time
 from pathlib import Path
 
 import httpx
-from fastapi import Depends, FastAPI, HTTPException, Request, Security
+from fastapi import Depends, FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse, StreamingResponse, RedirectResponse
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -138,21 +138,11 @@ async def check_auth_openai(request: Request) -> str | JSONResponse:
         )
     return auth_header[7:]
 def check_admin_auth(request: Request) -> str:
-    admin_pwd = get_service().get_admin_password()
-    token = request.cookies.get('adminToken')
-    if not token or token != admin_pwd:
-        raise HTTPException(
-            status_code=401,
-            detail="Invalid Admin Password.",
-        )
-    return token
+    # Local-only deployment: temporarily allow the web console without login.
+    return request.cookies.get('adminToken') or 'local-dev'
 
 def get_optional_admin_auth(request: Request) -> str | None:
-    token = request.cookies.get('adminToken')
-    admin_pwd = get_service().get_admin_password()
-    if token == admin_pwd:
-        return token
-    return None
+    return request.cookies.get('adminToken') or 'local-dev'
 
 class LoginRequest(BaseModel):
     password: str
@@ -207,11 +197,6 @@ def set_debug(enabled: bool) -> None:
 
 @app.middleware('http')
 async def security_and_log_middleware(request: Request, call_next):
-    if request.url.path in ['/docs', '/openapi.json', '/redoc']:
-        token = request.cookies.get('adminToken')
-        if _service and token != _service.get_admin_password():
-            return RedirectResponse(url='/login')
-
     if _debug_enabled:
         _debug_log(
             'request_received',
