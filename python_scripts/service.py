@@ -405,6 +405,7 @@ class ProxyService:
             manual_order_loader=self.get_manual_order,
             disabled_models_loader=self.get_disabled_models,
             allowed_models_loader=self.usable_model_keys,
+            route_order_loader=self.route_model_order,
             request_logger=lambda platform, model_id, status, input_tokens, output_tokens, latency_ms, error=None: log_request(self.db_url, platform, model_id, status, input_tokens, output_tokens, latency_ms, error),
             runtime_model_start=self.mark_runtime_model_start,
             runtime_model_finish=self.mark_runtime_model_finish,
@@ -1884,6 +1885,25 @@ class ProxyService:
 
         return {'models': stats, 'strategy': 'priority', 'fallback': True}
 
+    def route_model_order(self) -> list[tuple[str, str]]:
+        try:
+            data = self.models_stats()
+        except Exception:
+            logger.exception('route_model_order models_stats failed')
+            data = self.models_stats_fallback()
+        items = data.get('models', []) if isinstance(data, dict) else []
+        ordered: list[tuple[str, str]] = []
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            if item.get('enabled') is False or item.get('chat_candidate') is False:
+                continue
+            provider = str(item.get('provider') or '').strip()
+            model = str(item.get('model') or '').strip()
+            if provider and model:
+                ordered.append((provider, model))
+        return ordered
+
     def resolve_openai_target(self, payload: JsonObject) -> ResolvedOpenAIRequest:
         raw_model = payload.get('model')
         raw_provider = payload.get('provider')
@@ -1937,15 +1957,17 @@ class ProxyService:
         return self.forward_direct_chat(target.provider, target.model, payload)
 
     def forward_alias_chat(self, alias: AliasName, payload: JsonObject) -> OpenAIForwardResult:
-        candidates = resolve_alias_candidates(
-            alias,
-            self.available_providers(),
-            health=load_health(self.health_path),
-            now_ts=int(time.time()),
-            ttl_seconds=self.health_ttl_seconds,
-            manual_order=self.get_manual_order(),
-            disabled_models=self.get_disabled_models()
-        )
+        candidates = self.route_model_order() if alias == 'auto' else []
+        if not candidates:
+            candidates = resolve_alias_candidates(
+                alias,
+                self.available_providers(),
+                health=load_health(self.health_path),
+                now_ts=int(time.time()),
+                ttl_seconds=self.health_ttl_seconds,
+                manual_order=self.get_manual_order(),
+                disabled_models=self.get_disabled_models()
+            )
         if not candidates:
             return OpenAIForwardResult(
                 ok=False,

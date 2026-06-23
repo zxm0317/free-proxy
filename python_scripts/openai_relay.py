@@ -53,6 +53,7 @@ class OpenAIRelay:
         manual_order_loader=None,
         disabled_models_loader=None,
         allowed_models_loader=None,
+        route_order_loader=None,
         request_logger=None,
         runtime_model_start=None,
         runtime_model_finish=None,
@@ -68,6 +69,7 @@ class OpenAIRelay:
         self.manual_order_loader = manual_order_loader
         self.disabled_models_loader = disabled_models_loader
         self.allowed_models_loader = allowed_models_loader
+        self.route_order_loader = route_order_loader
         self.request_logger = request_logger
         self.runtime_model_start = runtime_model_start
         self.runtime_model_finish = runtime_model_finish
@@ -433,8 +435,15 @@ class OpenAIRelay:
             disabled_models = list(dict.fromkeys([*disabled_models, *health_unavailable_models]))
             _trace_relay('skip_unavailable_models', models=','.join(sorted(health_unavailable_models[:20])), count=len(health_unavailable_models))
         step_start = time.time()
+        routed_candidates = []
+        if (not requested_model or requested_model in {'auto', 'free-proxy/auto', 'free_proxy/auto'}) and callable(self.route_order_loader):
+            loaded_route_order = self.route_order_loader()
+            routed_candidates = [
+                CandidateTarget(provider, model, 'provider_default', index)
+                for index, (provider, model) in enumerate(loaded_route_order or [])
+            ]
         candidates = self._prioritize_interactive_clients(
-            build_auto_candidates(
+            routed_candidates or build_auto_candidates(
                 requested_model=requested_model,
                 configured=configured_providers,
                 health=health_state,
