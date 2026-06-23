@@ -1359,6 +1359,10 @@
 
                 <!-- Table Container -->
                 <div class="table-container" style="overflow-x: auto; border: 1px solid var(--line); border-radius: 20px; background: #fff;">
+                    <div style="display: flex; align-items: center; justify-content: flex-end; gap: 10px; padding: 10px 12px; border-bottom: 1px solid var(--line);">
+                        <span id="latencyTestStatus" style="font-size: 12px; color: var(--muted);"></span>
+                        <button id="latencyTestBtn" class="btn btn-secondary" onclick="runLatencyTest()" style="padding: 6px 12px; font-size: 12px;">一键测延迟</button>
+                    </div>
                     <table style="width: 100%; border-collapse: collapse; text-align: left; font-size: 13px;">
                         <thead>
                             <tr style="border-bottom: 1px solid var(--line); background: #ffffff; color: var(--muted);">
@@ -3353,6 +3357,96 @@
             document.getElementById('floatingSaveBar').style.display = 'none';
             await fetchModelsStats();
             resetButton();
+        };
+
+        window.runLatencyTest = async function() {
+            const btn = document.getElementById('latencyTestBtn');
+            const status = document.getElementById('latencyTestStatus');
+            if (!btn || btn.disabled) return;
+            const sourceList = localModelsOrder || currentModelsOrder;
+            const targets = sourceList.filter((item) =>
+                item
+                && item.chat_candidate !== false
+                && item.analysis_status === 'ok'
+                && item.probe_status !== 'failed'
+                && item.temporarily_disabled !== true
+            );
+            if (!targets.length) {
+                showToast('没有可测速模型', 'error');
+                return;
+            }
+
+            const originalText = btn.textContent;
+            const concurrencyLimit = 4;
+            const requestTimeoutMs = 15000;
+            let cursor = 0;
+            let done = 0;
+            let success = 0;
+            let failed = 0;
+            btn.disabled = true;
+
+            const updateProgress = () => {
+                btn.textContent = `测延迟 ${done}/${targets.length}`;
+                if (status) status.textContent = `成功 ${success}，失败 ${failed}`;
+            };
+            updateProgress();
+
+            async function testLatency(item) {
+                const modelKey = `${item.provider}/${item.model}`;
+                const controller = new AbortController();
+                const timer = window.setTimeout(() => controller.abort(), requestTimeoutMs);
+                try {
+                    const res = await fetch('/api/models/test', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ model_key: modelKey }),
+                        signal: controller.signal
+                    });
+                    const data = await res.json();
+                    const category = data.category || '';
+                    item.probe_status = data.ok ? 'success' : (category === 'auth' || category === 'model_not_found' ? 'failed' : 'recoverable');
+                    item.probe_category = category;
+                    item.latency_ms = Number.isFinite(data.latency_ms) ? data.latency_ms : null;
+                    item.probe_checked_at = Math.floor(Date.now() / 1000);
+                    item.probe_error = data.error || '';
+                    if (data.ok) {
+                        success += 1;
+                        item.analysis_status = 'ok';
+                        item.hide_reason = '';
+                    } else {
+                        failed += 1;
+                    }
+                } catch (err) {
+                    failed += 1;
+                    item.probe_status = 'recoverable';
+                    item.probe_category = 'network';
+                    item.latency_ms = null;
+                    item.probe_checked_at = Math.floor(Date.now() / 1000);
+                    item.probe_error = err.name === 'AbortError' ? '测速超时' : (err.message || '测速失败');
+                } finally {
+                    window.clearTimeout(timer);
+                    done += 1;
+                    updateProgress();
+                    renderModelsStatsTable();
+                }
+            }
+
+            async function worker() {
+                while (cursor < targets.length) {
+                    const item = targets[cursor++];
+                    await testLatency(item);
+                }
+            }
+
+            try {
+                await Promise.all(Array.from({ length: Math.min(concurrencyLimit, targets.length) }, worker));
+                showToast(`延迟测试完成：成功 ${success}，失败 ${failed}`, success ? 'success' : 'error');
+                await fetchModelsStats();
+            } finally {
+                btn.disabled = false;
+                btn.textContent = originalText;
+                if (status) status.textContent = '';
+            }
         };
 
         window.toggleModelEnabled = async function(modelId, checked) {
