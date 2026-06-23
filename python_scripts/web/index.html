@@ -2672,6 +2672,7 @@
                     body: JSON.stringify({ api_key: apiKey, label: label }),
                 });
                 state.editing[providerId + '_' + keyId] = false;
+                delete state.verifyResults[providerId + '_' + keyId];
                 showToast('API Key 已更新', 'success');
                 await loadStatuses();
                 await ensureVisibleModels(true);
