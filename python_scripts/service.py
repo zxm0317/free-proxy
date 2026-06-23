@@ -646,6 +646,9 @@ class ProxyService:
                         'id': k['id'],
                         'masked': self._mask_key(k['api_key']),
                         'label': k.get('label') or 'Default',
+                        'verified': k.get('verified') is True,
+                        'verified_model': k.get('verified_model') or '',
+                        'verified_at': k.get('verified_at'),
                     } for k in keys
                 ],
                 'models': [m for m in get_provider_model_hints(provider.name) if m.startswith('free-proxy/')],
@@ -671,6 +674,9 @@ class ProxyService:
                 target['api_key'] = value
                 if label.strip():
                     target['label'] = label.strip()
+                target.pop('verified', None)
+                target.pop('verified_model', None)
+                target.pop('verified_at', None)
             else:
                 raise ProviderError(f'Key ID {key_id} not found')
         else:
@@ -679,7 +685,8 @@ class ProxyService:
             keys.append({
                 'id': new_id,
                 'api_key': value,
-                'label': lbl
+                'label': lbl,
+                'verified': False,
             })
             
         upsert_key(self.db_url, f"multi_keys_{provider_name}", json.dumps(keys))
@@ -690,6 +697,25 @@ class ProxyService:
             self._models_cache.pop(provider_name, None)
             
         return {'ok': True, 'provider': provider_name, 'masked': self._mask_key(value)}
+
+    def mark_provider_key_verified(self, provider_name: str, key_id: str | None, verified_model: str) -> None:
+        provider = get_provider(provider_name)
+        keys = self.get_provider_keys(provider.name)
+        if not keys:
+            return
+        target_id = key_id or keys[0].get('id') or 'default'
+        changed = False
+        for item in keys:
+            if str(item.get('id') or '') == str(target_id):
+                item['verified'] = True
+                item['verified_model'] = verified_model
+                item['verified_at'] = int(time.time())
+                changed = True
+                break
+        if not changed:
+            return
+        upsert_key(self.db_url, f"multi_keys_{provider.name}", json.dumps(keys))
+        upsert_key(self.db_url, provider.api_key_env, keys[0]['api_key'])
 
     def _clear_provider_model_state(self, provider_name: str) -> None:
         delete_model_probe_results_for_provider(self.db_url, provider_name)
@@ -1132,12 +1158,14 @@ class ProxyService:
         for candidate in candidates[:3]:
             result = self.probe(provider_name, candidate, key_id=key_id)
             if result.ok:
+                verified_model = result.actual_model or candidate
+                self.mark_provider_key_verified(provider_name, key_id, verified_model)
                 return {
                     'ok': True,
                     'provider': provider_name,
                     'models': candidates,
                     'category': None,
-                    'verified_model': result.actual_model or candidate,
+                    'verified_model': verified_model,
                     'note': '已通过真实请求验证该 key 可调用模型',
                 }
 

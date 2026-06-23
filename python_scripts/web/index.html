@@ -2146,7 +2146,7 @@
                 if (status.keys && status.keys.length > 0) {
                     for (const key of status.keys) {
                         const cacheKey = provider.id + '_' + key.id;
-                        const verify = state.verifyResults[cacheKey];
+                        const verify = state.verifyResults[cacheKey] || (key.verified ? { ok: true, verified_model: key.verified_model, verified_at: key.verified_at } : null);
                         const isEditing = Boolean(state.editing[cacheKey]);
                         
                         let statusDotClass = 'keys-status-dot';
@@ -2160,7 +2160,8 @@
                                 statusDotClass += ' error';
                                 statusText = '错误';
                             }
-                            const now = new Date();
+                            const ts = Number(verify.verified_at || 0);
+                            const now = ts ? new Date(ts * 1000) : new Date();
                             verifyTimeStr = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
                         }
 
