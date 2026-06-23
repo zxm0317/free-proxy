@@ -1747,6 +1747,12 @@ class ProxyService:
             db_keys = {}
 
         try:
+            probe_results = get_model_probe_results(self.db_url)
+        except Exception:
+            logger.exception('models_stats_fallback probe result load failed')
+            probe_results = {}
+
+        try:
             configured_names = configured_provider_names(db_keys)
         except Exception:
             logger.exception('models_stats_fallback provider detection failed')
@@ -1806,6 +1812,24 @@ class ProxyService:
                 if not model_text or key in seen:
                     continue
                 seen.add(key)
+                probe = probe_results.get(key, {})
+                if not isinstance(probe, dict):
+                    probe = {}
+                probe_ok = probe.get('ok')
+                probe_error = str(probe.get('error') or '')
+                probe_status_code = probe.get('status')
+                probe_category = ''
+                if probe_ok is False:
+                    try:
+                        probe_category = classify_error(int(probe_status_code or 0), probe_error).category
+                    except Exception:
+                        probe_category = classify_error(0, probe_error).category
+                probe_status = (
+                    'failed' if is_permanent_unavailable_category(probe_category)
+                    else 'recoverable' if probe_ok is False
+                    else 'success' if probe_ok is True
+                    else 'untested'
+                )
                 try:
                     limits = get_model_limits(provider_name, model_text)
                     speed = synthetic_speed_score(provider_name, model_text)
@@ -1828,19 +1852,19 @@ class ProxyService:
                     'spd': int(speed * 100),
                     'int': int(intel * 100),
                     'headroom': 1.0,
-                    'ok': None,
-                    'probe_status': 'success',
-                    'latency_ms': None,
-                    'probe_checked_at': None,
-                    'probe_error': '',
-                    'probe_category': '',
+                    'ok': probe_ok,
+                    'probe_status': probe_status,
+                    'latency_ms': probe.get('latency_ms') if isinstance(probe.get('latency_ms'), int) else None,
+                    'probe_checked_at': probe.get('checked_at') if isinstance(probe.get('checked_at'), int) else None,
+                    'probe_error': probe_error,
+                    'probe_category': probe_category,
                     'rate_limits': {},
                     'observations': 0,
                     'monthly_token_budget': limits['monthly_token_budget'],
                     'rpm_limit': limits['rpm_limit'],
                     'rpd_limit': limits['rpd_limit'],
-                    'enabled': chat_candidate,
-                    'manually_enabled': chat_candidate,
+                    'enabled': chat_candidate and probe_status == 'success',
+                    'manually_enabled': chat_candidate and probe_status != 'failed',
                     'temporarily_disabled': False,
                     'disabled_until': None,
                     'disabled_reason': '',
