@@ -1612,6 +1612,7 @@ class ProxyService:
             probe_ok = probe.get('ok') if isinstance(probe, dict) else None
             probe_error = str(probe.get('error') or '') if isinstance(probe, dict) else ''
             probe_status_code = probe.get('status') if isinstance(probe, dict) else None
+            probe_latency_ms = probe.get('latency_ms') if isinstance(probe.get('latency_ms'), int) else None
             probe_category = ''
             if probe_ok is False:
                 try:
@@ -1635,7 +1636,8 @@ class ProxyService:
                 reason_for_label = health_reason or probe_category
                 unavailable_error = 'API Key 无效或权限不足' if reason_for_label == 'auth' else '模型不存在或不可用'
             probe_status = (
-                'failed' if is_unavailable_model
+                'success' if isinstance(probe_latency_ms, int)
+                else 'failed' if is_unavailable_model
                 else 'recoverable' if is_recoverable_model
                 else 'success' if probe_ok is True
                 else 'untested'
@@ -1709,7 +1711,7 @@ class ProxyService:
                 'headroom': float(f"{headroom:.2f}"),
                 'ok': entry.get('ok') if isinstance(entry, dict) else None,
                 'probe_status': probe_status,
-                'latency_ms': probe.get('latency_ms') if isinstance(probe.get('latency_ms'), int) else None,
+                'latency_ms': probe_latency_ms,
                 'probe_checked_at': probe_checked_at,
                 'probe_error': unavailable_error or probe_error,
                 'probe_category': health_reason or probe_category,
@@ -1818,6 +1820,7 @@ class ProxyService:
                 probe_ok = probe.get('ok')
                 probe_error = str(probe.get('error') or '')
                 probe_status_code = probe.get('status')
+                probe_latency_ms = probe.get('latency_ms') if isinstance(probe.get('latency_ms'), int) else None
                 probe_category = ''
                 if probe_ok is False:
                     try:
@@ -1825,7 +1828,8 @@ class ProxyService:
                     except Exception:
                         probe_category = classify_error(0, probe_error).category
                 probe_status = (
-                    'failed' if is_permanent_unavailable_category(probe_category)
+                    'success' if isinstance(probe_latency_ms, int)
+                    else 'failed' if is_permanent_unavailable_category(probe_category)
                     else 'recoverable' if probe_ok is False
                     else 'success' if probe_ok is True
                     else 'untested'
@@ -1854,7 +1858,7 @@ class ProxyService:
                     'headroom': 1.0,
                     'ok': probe_ok,
                     'probe_status': probe_status,
-                    'latency_ms': probe.get('latency_ms') if isinstance(probe.get('latency_ms'), int) else None,
+                    'latency_ms': probe_latency_ms,
                     'probe_checked_at': probe.get('checked_at') if isinstance(probe.get('checked_at'), int) else None,
                     'probe_error': probe_error,
                     'probe_category': probe_category,
