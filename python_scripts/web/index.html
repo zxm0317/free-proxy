@@ -4092,14 +4092,14 @@
                 const dragCursor = isManual ? 'grab' : 'default';
                 const isTempDisabled = item.temporarily_disabled === true;
                 const isRecoverable = item.probe_status === 'recoverable';
-                const isAutoDisabled = isTempDisabled || isRecoverable;
+                const isAutoDisabled = isTempDisabled || item.probe_status === 'failed';
                 const rowOpacity = item.enabled && !isAutoDisabled ? '1.0' : '0.5';
                 const disabledUntilText = formatDisabledUntil(item.disabled_until);
                 const tempDisabledBadge = isTempDisabled
                     ? `<span class="badge-tag tag-penalty">${escapeHtml(disabledReasonLabel(item.disabled_reason))}${disabledUntilText ? ` · 禁用至 ${escapeHtml(disabledUntilText)}` : ''}</span>`
                     : '';
                 const recoverableBadge = isRecoverable
-                    ? '<span class="badge-tag tag-penalty">可恢复错误 · 等待自动复测</span>'
+                    ? '<span class="badge-tag tag-penalty">可恢复错误 · 仍可调用</span>'
                     : '';
                 
                 const budgetStr = item.monthly_token_budget || '18M';
@@ -4190,8 +4190,8 @@
                         <!-- Switch (iOS toggle) -->
                         <td style="padding: 12px; vertical-align: middle; text-align: right; white-space: nowrap;">
                             <button class="btn btn-secondary" style="padding: 4px 8px; font-size: 11px; margin-right: 8px;" onclick="pinModelToTop('${modelKeyToken}', this)" ${index === 0 ? 'disabled' : ''}>&#x7f6e;&#x9876;</button>
-                            <label class="switch" title="${isRecoverable ? '点击手动复测，成功后恢复' : (isTempDisabled ? escapeHtml(`${disabledReasonLabel(item.disabled_reason)}${disabledUntilText ? `，禁用至 ${disabledUntilText}` : ''}`) : '')}">
-                                <input type="checkbox" ${item.enabled && !isAutoDisabled ? 'checked' : ''} ${isTempDisabled ? 'disabled' : ''} onchange="${isRecoverable ? `recoverModel('${item.provider}/${item.model}', this)` : `toggleModelEnabled('${item.provider}/${item.model}', this.checked)`}">
+                            <label class="switch" title="${isTempDisabled ? escapeHtml(`${disabledReasonLabel(item.disabled_reason)}${disabledUntilText ? `，禁用至 ${disabledUntilText}` : ''}`) : ''}">
+                                <input type="checkbox" ${item.enabled && !isAutoDisabled ? 'checked' : ''} ${isTempDisabled ? 'disabled' : ''} onchange="toggleModelEnabled('${item.provider}/${item.model}', this.checked)">
                                 <span class="slider"></span>
                             </label>
                         </td>

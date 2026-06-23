@@ -1652,7 +1652,7 @@ class ProxyService:
                 elif not is_unavailable_model:
                     analysis_status = 'retest_required'
                     hide_reason = f'{hide_reason} · 等待今日复测' if hide_reason else '等待今日复测'
-            is_currently_callable = probe_status == 'success' and analysis_status == 'ok'
+            is_currently_callable = probe_status in {'success', 'recoverable'} and analysis_status == 'ok'
             
             # Use freellmapi Bandit logic for display!
             success_streak = int(entry.get('success_streak', 0)) if isinstance(entry, dict) else 0
@@ -1863,7 +1863,7 @@ class ProxyService:
                     'monthly_token_budget': limits['monthly_token_budget'],
                     'rpm_limit': limits['rpm_limit'],
                     'rpd_limit': limits['rpd_limit'],
-                    'enabled': chat_candidate and probe_status == 'success',
+                    'enabled': chat_candidate and probe_status != 'failed',
                     'manually_enabled': chat_candidate and probe_status != 'failed',
                     'temporarily_disabled': False,
                     'disabled_until': None,
