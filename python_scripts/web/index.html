@@ -2252,7 +2252,7 @@
                                         <span class="keys-key-time" style="font-size: 10px; color: var(--muted);">${verifyTimeStr}</span>
                                     </div>
                                     <div class="keys-key-actions" style="display: flex; gap: 4px; margin-left: auto;">
-                                        <button onclick="verifyProviderDirectly('${provider.id}', '${key.id}', this)" style="padding: 2px 8px; font-size: 11px;">${verify && verify.ok ? '已验证' : '验证'}</button>
+                                        <button onclick="verifyProviderDirectly('${provider.id}', '${key.id}', this)" style="padding: 2px 8px; font-size: 11px;">${verify && verify.ok ? '重新验证' : '验证'}</button>
                                         <button onclick="state.editing['${cacheKey}'] = true; renderProviderCards();" style="padding: 2px 8px; font-size: 11px;">编辑</button>
                                         <button class="remove" onclick="removeProviderKey('${provider.id}', '${key.id}')" style="padding: 2px 8px; font-size: 11px;">清除</button>
                                     </div>
@@ -2473,6 +2473,17 @@
             refreshChatOptions();
         }
 
+        async function refreshProviderModelsFromVerify(providerId) {
+            state.activeProvider = providerId;
+            persistSelection();
+            await loadModelsForProvider(providerId, true);
+            renderProviderTabs();
+            renderModelSection();
+            refreshChatOptions();
+            renderPlaygroundModels();
+            fetchModelsStats();
+        }
+
         function visibleModels() {
             const search = modelSearch.value.trim().toLowerCase();
             const items = state.activeProvider === 'all'
@@ -2683,9 +2694,8 @@
                 });
                 document.getElementById('keys-api-key-input').value = '';
                 if (labelInput) labelInput.value = '';
-                showToast('API Key 已成功添加', 'success');
+                showToast('API Key 已成功添加，请点击验证', 'success');
                 await loadStatuses();
-                await ensureVisibleModels(true);
             } catch (err) {
                 showToast(err.message || '添加失败', 'error');
             }
@@ -2734,9 +2744,8 @@
                 });
                 state.editing[providerId + '_' + keyId] = false;
                 delete state.verifyResults[providerId + '_' + keyId];
-                showToast('API Key 已更新', 'success');
+                showToast('API Key 已更新，请点击验证', 'success');
                 await loadStatuses();
-                await ensureVisibleModels(true);
             } catch (err) { showToast(err.message || '修改失败', 'error'); }
             finally { btn.disabled = false; }
         };
@@ -2908,15 +2917,17 @@
                 state.verifyResults[cacheKey] = data;
                 showToast(`${providerId} 验证成功`, 'success');
                 await loadStatuses();
-                await ensureVisibleModels(true);
+                await refreshProviderModelsFromVerify(providerId);
             } catch (error) {
                 state.verifyResults[cacheKey] = error.payload || {};
                 if (state.verifyResults[cacheKey].ok) {
                     showToast(`${providerId} Key有效，但当前不可调用`, 'success');
+                    await loadStatuses();
+                    await refreshProviderModelsFromVerify(providerId);
                 } else {
                     showToast(`${providerId} 验证失败`, 'error');
+                    await loadStatuses();
                 }
-                await loadStatuses();
             } finally {
                 btn.disabled = false;
                 btn.textContent = originText;
@@ -2989,7 +3000,6 @@
                 persistSelection();
                 showToast(`${providerId} 已保存`);
                 setDiagnostics('status-success', buildDiagnosticLines('保存 Provider Key', providerId, '', { ok: true }, '点击“验证”确认这个 Key 真的可以调用模型。'));
-                await ensureVisibleModels(true);
             } catch (error) {
                 showToast(error.message || '保存失败', 'error');
                 setDiagnostics('status-error', buildDiagnosticLines('保存 Provider Key', providerId, '', { ok: false, error: error.message || '未知错误' }, '检查输入格式后重试。'));
@@ -3011,7 +3021,7 @@
                 renderProviderCards();
                 showToast(`${providerId} 验证成功`);
                 setDiagnostics('status-success', buildDiagnosticLines('验证 Provider', providerId, '', { ...data, ok: true }, '继续从推荐模型里选择一个模型做探测或聊天验证。'));
-                await ensureVisibleModels(true);
+                await refreshProviderModelsFromVerify(providerId);
             } catch (error) {
                 const payload = error.payload || {};
                 state.verifyResults[providerId] = payload;
