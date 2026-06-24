@@ -1352,7 +1352,7 @@ class ProxyService:
         now = time.time()
         if not hasattr(self, '_models_cache'):
             self._models_cache = {}
-        if provider_name in self._models_cache:
+        if provider_name in self._models_cache and not refresh:
             models, expiry = self._models_cache[provider_name]
             if now < expiry:
                 return models
@@ -1559,7 +1559,7 @@ class ProxyService:
                 return [k.split('/', 1)[1] for k in known_model_keys if k.startswith(f'{p_name}/')]
             elif p_name.startswith('custom-'):
                 return []
-            return self.get_cached_provider_models(p_name, refresh=False)
+            return self.get_cached_provider_models(p_name, refresh=p_name == 'ollama')
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=min(20, max(1, len(configured_names)))) as executor:
             futures = {executor.submit(fetch_p, p_name): p_name for p_name in configured_names}
