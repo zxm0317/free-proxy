@@ -1,0 +1,28 @@
+# Keep this file in sync with ../requirements.txt.
+# Vercel Python functions install dependencies from the function directory.
+aiolimiter==1.2.1
+annotated-doc==0.0.4
+annotated-types==0.7.0
+anyio==4.13.0
+asn1crypto==1.5.1
+cachetools==7.1.4
+certifi==2026.5.20
+cffi==2.0.0
+cryptography==48.0.0
+fastapi==0.136.3
+h11==0.16.0
+httpcore==1.0.9
+httpx==0.28.1
+idna==3.17
+pg8000==1.31.5
+psycopg-binary==3.3.4
+pycparser==3.0
+pydantic==2.13.4
+pydantic-core==2.46.4
+python-dateutil==2.9.0.post0
+scramp==1.4.8
+six==1.17.0
+starlette==1.2.0
+tenacity==9.1.4
+typing-extensions==4.15.0
+typing-inspection==0.4.2
