@@ -2863,12 +2863,17 @@
         window.startAccountProviderLogin = async function(providerId, btn) {
             const originText = btn ? btn.textContent : '';
             if (btn) { btn.disabled = true; btn.textContent = '登录中...'; }
+            const loginWindow = window.open('about:blank', '_blank');
             try {
+                if (!loginWindow) {
+                    throw new Error('登录窗口被浏览器拦截');
+                }
                 const data = await requestJson(`/api/account-providers/${providerId}/login/start`);
                 if (!data.verification_url || !data.state) {
                     throw new Error('登录链接生成失败');
                 }
-                window.open(data.verification_url, '_blank', 'noopener,noreferrer');
+                try { loginWindow.opener = null; } catch {}
+                loginWindow.location.href = data.verification_url;
                 showToast('已打开登录页面，授权后自动检测', 'success');
                 const started = Date.now();
                 const poll = async () => {
@@ -2885,6 +2890,7 @@
                 await loadStatuses();
                 await ensureVisibleModels(true);
             } catch (err) {
+                try { if (loginWindow && !loginWindow.closed) loginWindow.close(); } catch {}
                 showToast(err.message || '登录失败', 'error');
             } finally {
                 if (btn) { btn.disabled = false; btn.textContent = originText; }

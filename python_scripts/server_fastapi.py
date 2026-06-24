@@ -271,6 +271,9 @@ async def start_account_provider_login(provider: str):
         return await run_in_threadpool(get_service().start_account_provider_login, provider)
     except ProviderError as exc:
         return JSONResponse({'ok': False, 'error': str(exc)}, status_code=400)
+    except Exception as exc:
+        logger.exception('account provider login start failed: %s', provider)
+        return JSONResponse({'ok': False, 'error': str(exc) or '登录启动失败'}, status_code=502)
 
 
 @app.get('/api/account-providers/{provider}/login/poll', dependencies=[Depends(check_admin_auth)])
