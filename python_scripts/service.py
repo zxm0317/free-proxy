@@ -1536,6 +1536,30 @@ class ProxyService:
             }
         return analysis
 
+    @staticmethod
+    def _dedupe_model_stats(stats: list[dict[str, object]]) -> list[dict[str, object]]:
+        def dedupe_key(item: dict[str, object]) -> str:
+            model = str(item.get('model') or '').strip().lower()
+            return model or str(item.get('model_key_display') or '').strip().lower()
+
+        def quality(item: dict[str, object]) -> tuple[int, int, int, float]:
+            status = str(item.get('probe_status') or '')
+            status_score = {'success': 4, 'recoverable': 3, 'untested': 2, 'failed': 1}.get(status, 0)
+            enabled_score = 1 if item.get('enabled') is not False else 0
+            chat_score = 1 if item.get('chat_candidate') is not False else 0
+            score = float(item.get('score') or 0)
+            return (status_score, enabled_score, chat_score, score)
+
+        by_model: dict[str, dict[str, object]] = {}
+        for item in stats:
+            key = dedupe_key(item)
+            if not key:
+                continue
+            current = by_model.get(key)
+            if current is None or quality(item) > quality(current):
+                by_model[key] = item
+        return list(by_model.values())
+
     def models_stats(self) -> dict[str, object]:
         from .provider_routing import CandidateTarget, build_auto_candidates
         from .qoder_provider import qoder_model_display_name, qoder_model_key_display
@@ -1856,6 +1880,7 @@ class ProxyService:
             
         manual_rank = {key: index for index, key in enumerate(manual_order)}
         stats.sort(key=lambda item: manual_rank.get(f"{item.get('provider')}/{item.get('model')}", len(manual_rank) + int(item.get('rank') or 0)))
+        stats = self._dedupe_model_stats(stats)
         for index, item in enumerate(stats):
             item['rank'] = index
 
@@ -2039,6 +2064,7 @@ class ProxyService:
 
         manual_rank = {key: index for index, key in enumerate(manual_order)}
         stats.sort(key=lambda item: manual_rank.get(f"{item.get('provider')}/{item.get('model')}", len(manual_rank) + int(item.get('rank') or 0)))
+        stats = self._dedupe_model_stats(stats)
         for index, item in enumerate(stats):
             item['rank'] = index
 
