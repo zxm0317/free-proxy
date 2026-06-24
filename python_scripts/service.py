@@ -1776,7 +1776,12 @@ class ProxyService:
                 'chat_candidate': chat_candidate,
             })
             
-        # Keep the order of candidates (which respects manual_order and capabilities)
+        manual_rank = {key: index for index, key in enumerate(manual_order)}
+        stats.sort(key=lambda item: manual_rank.get(f"{item.get('provider')}/{item.get('model')}", len(manual_rank) + int(item.get('rank') or 0)))
+        for index, item in enumerate(stats):
+            item['rank'] = index
+
+        # Keep manual_order ahead of score-based capabilities.
         return {'models': stats, 'strategy': 'priority'}
 
     def models_stats_fallback(self) -> dict[str, object]:
@@ -1794,6 +1799,12 @@ class ProxyService:
         except Exception:
             logger.exception('models_stats_fallback probe result load failed')
             probe_results = {}
+
+        try:
+            manual_order = self.get_manual_order()
+        except Exception:
+            logger.exception('models_stats_fallback manual order load failed')
+            manual_order = []
 
         try:
             analysis_stats = self._model_analysis_stats()
@@ -1936,6 +1947,11 @@ class ProxyService:
                     'hide_reason': analysis.get('hide_reason', ''),
                     'chat_candidate': chat_candidate,
                 })
+
+        manual_rank = {key: index for index, key in enumerate(manual_order)}
+        stats.sort(key=lambda item: manual_rank.get(f"{item.get('provider')}/{item.get('model')}", len(manual_rank) + int(item.get('rank') or 0)))
+        for index, item in enumerate(stats):
+            item['rank'] = index
 
         return {'models': stats, 'strategy': 'priority', 'fallback': True}
 
