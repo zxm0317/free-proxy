@@ -2159,7 +2159,7 @@
                         if (verify) {
                             if (verify.ok) {
                                 statusDotClass += ' healthy';
-                                statusText = '已验证';
+                                statusText = verify.callable === false ? 'Key有效' : '已验证';
                             } else {
                                 statusDotClass += ' error';
                                 statusText = '错误';
@@ -2850,7 +2850,11 @@
                 await ensureVisibleModels(true);
             } catch (error) {
                 state.verifyResults[cacheKey] = error.payload || {};
-                showToast(`${providerId} 验证失败`, 'error');
+                if (state.verifyResults[cacheKey].ok) {
+                    showToast(`${providerId} Key有效，但当前不可调用`, 'success');
+                } else {
+                    showToast(`${providerId} 验证失败`, 'error');
+                }
                 await loadStatuses();
             } finally {
                 btn.disabled = false;

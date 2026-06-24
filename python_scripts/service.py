@@ -1156,6 +1156,22 @@ class ProxyService:
             if model and model not in candidates:
                 candidates.append(model)
 
+        def key_valid_response(category: str = 'not_callable', status: int | None = None, error: str = '') -> dict[str, object]:
+            verified_model = candidates[0] if candidates else ''
+            if verified_model:
+                self.mark_provider_key_verified(provider_name, key_id, verified_model)
+            return {
+                'ok': True,
+                'callable': False,
+                'provider': provider_name,
+                'error': error or 'Key valid; chat call is not currently available',
+                'models': candidates,
+                'category': category,
+                'status': status,
+                'verified_model': verified_model,
+                'suggestion': remediation_suggestion(category, provider_name),
+            }
+
         for candidate in candidates[:3]:
             result = self.probe(provider_name, candidate, key_id=key_id)
             if result.ok:
@@ -1185,20 +1201,8 @@ class ProxyService:
         if candidates:
             failed = self.probe(provider_name, candidates[0], key_id=key_id)
             category = failed.category or classify_error(0, failed.error or '').category
-            if category in {'quota', 'rate_limit'}:
-                verified_model = failed.actual_model or candidates[0]
-                self.mark_provider_key_verified(provider_name, key_id, verified_model)
-                return {
-                    'ok': True,
-                    'callable': False,
-                    'provider': provider_name,
-                    'error': failed.error or 'Key valid but account is not currently callable',
-                    'models': candidates,
-                    'category': category,
-                    'status': failed.status,
-                    'verified_model': verified_model,
-                    'suggestion': remediation_suggestion(category, provider_name),
-                }
+            if first_error is None and models:
+                return key_valid_response(category, failed.status, failed.error or '')
             return {
                 'ok': False,
                 'provider': provider_name,
