@@ -56,6 +56,8 @@ def classify_error(status: int, body_text: str) -> ProviderFailure:
         return ProviderFailure('rate_limit', '触发频率限制', True)
     if any(token in text for token in ('network', 'connection', 'timed out', 'timeout', 'certificate verify failed', 'local issuer certificate', 'ssl', 'tls')):
         return ProviderFailure('network', '网络连接失败', True)
+    if any(token in text for token in ('upstream service', 'upstream error', 'service unavailable', '上游服务异常', '上游异常', '服务异常')):
+        return ProviderFailure('server', '上游服务异常', True)
 
     if status in (401, 403):
         return ProviderFailure('auth', 'API Key 无效或权限不足', False)

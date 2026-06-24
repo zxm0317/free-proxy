@@ -1426,6 +1426,8 @@ class ProxyService:
                 return '模型不存在或不可用'
             if failure.category == 'auth':
                 return 'API Key 无效或权限不足'
+            if failure.category == 'server':
+                return '上游服务异常'
             if any(term in recent_error for term in ('额度不足', '余额不足')) or any(term in error_lower for term in ('quota', 'rate limit', 'insufficient_quota')):
                 return '额度不足或限流'
             if any(term in recent_error for term in ('API Key 无效', '权限不足', '无效')) or any(term in error_lower for term in ('invalid key', 'unauthorized', 'forbidden', 'api key')):
@@ -1875,6 +1877,7 @@ class ProxyService:
                 probe_status = (
                     'failed' if is_permanent_unavailable_category(inferred_category)
                     else 'success' if probe_ok is True
+                    else 'recoverable' if inferred_category in {'server', 'network', 'rate_limit', 'quota', 'unknown'} and bool(recent_error)
                     else 'recoverable' if probe_ok is False
                     else 'untested'
                 )

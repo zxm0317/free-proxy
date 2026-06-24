@@ -4168,11 +4168,21 @@
                 return;
             }
             
+            const isAnalysisHidden = (item) => item.analysis_status === 'hidden' || item.analysis_status === 'retest_required';
             const failedModels = activeList.filter((item) => item.probe_status === 'failed');
-            const analysisHiddenModels = activeList.filter((item) => item.probe_status === 'success' && (item.analysis_status === 'hidden' || item.analysis_status === 'retest_required'));
-            const untestedModels = activeList.filter((item) => item.probe_status !== 'success' && item.probe_status !== 'failed' && item.probe_status !== 'recoverable');
+            const analysisHiddenModels = activeList.filter((item) => item.probe_status === 'success' && isAnalysisHidden(item));
+            const recoverableModels = activeList.filter((item) =>
+                item.probe_status === 'recoverable'
+                || (isAnalysisHidden(item) && item.probe_status !== 'success' && item.probe_status !== 'failed')
+            );
+            const untestedModels = activeList.filter((item) =>
+                item.probe_status !== 'success'
+                && item.probe_status !== 'failed'
+                && item.probe_status !== 'recoverable'
+                && !isAnalysisHidden(item)
+            );
             renderPendingProbeSection(untestedModels);
-            renderHiddenModelsSection(failedModels, [], [], analysisHiddenModels);
+            renderHiddenModelsSection(failedModels, recoverableModels, [], analysisHiddenModels);
 
             let displayList = activeList.filter((item) =>
                 (item.probe_status === 'success' || item.probe_status === 'recoverable')
