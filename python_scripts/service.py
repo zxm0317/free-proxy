@@ -495,7 +495,8 @@ class ProxyService:
             'qoder': {
                 'provider': 'qoder',
                 'name': 'Qoder',
-                'configured': bool(self._loaded_account_provider_accounts('qoder')),
+                'configured': bool(self._active_account_provider_accounts('qoder')),
+                'models_loaded': bool(self._loaded_account_provider_accounts('qoder')),
                 'accounts': [public_account(account) for account in self.account_provider_accounts('qoder')],
                 'supports_login': True,
                 'supports_round_robin': True,
@@ -695,9 +696,14 @@ class ProxyService:
                 'models': [m for m in get_provider_model_hints(provider.name) if m.startswith('free-proxy/')],
             }
             if provider.name == 'qoder':
+                active_accounts = self._active_account_provider_accounts('qoder')
+                loaded_accounts = self._loaded_account_provider_accounts('qoder')
                 statuses[provider.name]['account_provider'] = True
                 statuses[provider.name]['name'] = 'Qoder'
                 statuses[provider.name]['display_name'] = 'Qoder'
+                statuses[provider.name]['configured'] = bool(active_accounts)
+                statuses[provider.name]['enabled'] = bool(active_accounts)
+                statuses[provider.name]['models_loaded'] = bool(loaded_accounts)
                 statuses[provider.name]['accounts'] = [public_account(account) for account in self.account_provider_accounts('qoder')]
         return statuses
 

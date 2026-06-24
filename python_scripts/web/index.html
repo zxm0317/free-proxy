@@ -2232,6 +2232,35 @@
             return status.name || status.display_name || (provider && provider.name) || fallbackNames[providerId] || providerId;
         }
 
+        function mergeAccountProviderLoginResult(providerId, result) {
+            const account = result && result.account;
+            if (!account || !account.id) return;
+            const existing = state.statuses[providerId] || {};
+            const accounts = Array.isArray(existing.accounts) ? existing.accounts.slice() : [];
+            const index = accounts.findIndex((item) => String(item.id || '') === String(account.id));
+            if (index >= 0) {
+                accounts[index] = account;
+            } else {
+                accounts.push(account);
+            }
+            state.statuses[providerId] = {
+                ...existing,
+                provider: providerId,
+                name: accountProviderName(providerId),
+                display_name: accountProviderName(providerId),
+                account_provider: true,
+                configured: accounts.length > 0,
+                enabled: accounts.length > 0,
+                models_loaded: existing.models_loaded === true || accounts.some((item) => item.models_loaded === true),
+                supports_login: true,
+                supports_round_robin: true,
+                accounts,
+            };
+            allProviderStatuses = state.statuses;
+            renderProviderCards();
+            renderUnconfiguredFooter();
+        }
+
         function renderAccountProviderCard(providerId, status) {
             const providerName = accountProviderName(providerId);
             const accounts = Array.isArray(status.accounts) ? status.accounts : [];
@@ -2928,7 +2957,8 @@
                     await new Promise(resolve => setTimeout(resolve, 2000));
                     return poll();
                 };
-                await poll();
+                const loginResult = await poll();
+                mergeAccountProviderLoginResult(providerId, loginResult);
                 showToast(`${accountProviderName(providerId)} 登录成功`, 'success');
                 await loadStatuses();
             } catch (err) {
