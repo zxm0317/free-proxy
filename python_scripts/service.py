@@ -1855,7 +1855,6 @@ class ProxyService:
 
     def models_stats_fallback(self) -> dict[str, object]:
         from .provider_catalog import get_provider_model_hints
-        from .qoder_provider import qoder_model_display_name, qoder_model_key_display
         from .scoring import synthetic_speed_score, synthetic_intelligence_score, get_model_limits, is_chat_candidate_model
 
         try:
@@ -1982,8 +1981,13 @@ class ProxyService:
                 model_display = ''
                 model_key_display = model_text
                 if provider_name == 'qoder':
-                    model_display = qoder_model_display_name(model_text)
-                    model_key_display = qoder_model_key_display(model_text)
+                    try:
+                        from .qoder_provider import qoder_model_display_name, qoder_model_key_display
+                        model_display = qoder_model_display_name(model_text)
+                        model_key_display = qoder_model_key_display(model_text)
+                    except Exception:
+                        model_display = model_text
+                        model_key_display = f'qd/{model_text}'
                 stats.append({
                     'provider': provider_name,
                     'provider_display': provider_display,
