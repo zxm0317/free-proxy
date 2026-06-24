@@ -3411,8 +3411,7 @@
                     item.probe_checked_at = Math.floor(Date.now() / 1000);
                     item.probe_error = data.error || '';
                     if (item.probe_status === 'success') {
-                        item.analysis_status = 'ok';
-                        item.hide_reason = '';
+                        markModelRecovered(item, measuredLatency);
                     }
                     const result = { item, success: item.probe_status === 'success', latency: item.latency_ms || 999999 };
                     results.push(result);
@@ -3528,8 +3527,7 @@
                     item.probe_error = data.error || '';
                     if (item.probe_status === 'success') {
                         success += 1;
-                        item.analysis_status = 'ok';
-                        item.hide_reason = '';
+                        markModelRecovered(item, measuredLatency);
                     } else {
                         failed += 1;
                     }
@@ -3803,6 +3801,18 @@
                 console.error('fetchModelsStats error:', err);
                 showModelsStatsError(err && err.message ? err.message : 'load failed');
             }
+        }
+
+        function markModelRecovered(item, latencyMs) {
+            item.probe_status = 'success';
+            item.probe_category = '';
+            item.probe_error = '';
+            item.latency_ms = Number.isFinite(latencyMs) ? latencyMs : item.latency_ms;
+            item.probe_checked_at = Math.floor(Date.now() / 1000);
+            item.analysis_status = 'ok';
+            item.hide_reason = '';
+            item.enabled = true;
+            localModelsOrder = null;
         }
 
         function showModelsStatsError(message) {
