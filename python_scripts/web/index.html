@@ -2022,12 +2022,12 @@
             playgroundSendBtn.textContent = '发送中...';
             renderPlaygroundMessages();
 
+            let selected = playgroundModelSelect?.value || 'auto';
             try {
                 if (!proxyKey) {
                     throw new Error('请先在“钥匙”页生成统一 API 密钥。');
                 }
 
-                const selected = playgroundModelSelect?.value || 'auto';
                 const body = {
                     model: selected === 'auto' ? 'free-proxy/auto' : selected,
                     messages: nextMessages.map((msg) => ({ role: msg.role, content: msg.content })),
@@ -2076,6 +2076,9 @@
                 resizePlaygroundInput();
                 renderPlaygroundMessages();
                 playgroundInput.focus();
+                if (selected !== 'auto') {
+                    window.setTimeout(() => fetchModelsStats(), 300);
+                }
             }
         }
 

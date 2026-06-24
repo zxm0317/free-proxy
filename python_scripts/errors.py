@@ -43,6 +43,10 @@ def classify_error(status: int, body_text: str) -> ProviderFailure:
         'not available',
         'not supported',
         'model unavailable',
+        'model does not exist',
+        'model is not available',
+        '模型不存在',
+        '模型不可用',
     )
     if any(token in text for token in model_unavailable_tokens):
         return ProviderFailure('model_not_found', '模型不存在或不可用', False)
@@ -55,7 +59,7 @@ def classify_error(status: int, body_text: str) -> ProviderFailure:
 
     if status in (401, 403):
         return ProviderFailure('auth', 'API Key 无效或权限不足', False)
-    if status == 404:
+    if status in (404, 410):
         return ProviderFailure('model_not_found', '模型不存在或路径错误', False)
     if status == 429:
         return ProviderFailure('rate_limit', '触发频率限制', True)

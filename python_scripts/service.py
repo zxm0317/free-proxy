@@ -1421,6 +1421,11 @@ class ProxyService:
 
         def classify_hide_reason(request_count: int, success_rate: float | None, recent_error: str) -> str:
             error_lower = recent_error.lower()
+            failure = classify_error(0, recent_error)
+            if failure.category == 'model_not_found':
+                return '模型不存在或不可用'
+            if failure.category == 'auth':
+                return 'API Key 无效或权限不足'
             if any(term in recent_error for term in ('额度不足', '余额不足')) or any(term in error_lower for term in ('quota', 'rate limit', 'insufficient_quota')):
                 return '额度不足或限流'
             if any(term in recent_error for term in ('API Key 无效', '权限不足', '无效')) or any(term in error_lower for term in ('invalid key', 'unauthorized', 'forbidden', 'api key')):
