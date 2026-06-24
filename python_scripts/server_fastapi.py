@@ -238,10 +238,14 @@ async def health():
 
 @app.get('/api/keepalive/db')
 async def keepalive_db(request: Request):
-    expected = os.environ.get('KEEPALIVE_SECRET') or os.environ.get('CRON_SECRET') or ''
-    if expected:
+    expected_secrets = {
+        value
+        for value in (os.environ.get('KEEPALIVE_SECRET'), os.environ.get('CRON_SECRET'))
+        if value
+    }
+    if expected_secrets:
         auth_header = request.headers.get('Authorization', '')
-        if not auth_header.startswith('Bearer ') or auth_header[7:] != expected:
+        if not auth_header.startswith('Bearer ') or auth_header[7:] not in expected_secrets:
             return JSONResponse({'ok': False, 'error': 'unauthorized'}, status_code=401)
     try:
         return await run_in_threadpool(get_service().keep_database_alive)
