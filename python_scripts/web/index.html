@@ -1917,7 +1917,54 @@
             }
         }
 
-        window.openPlaygroundForModel = function(modelKeyToken) {
+        async function testModelForPlayground(item, btn) {
+            const modelKey = `${item.provider}/${item.model}`;
+            const originText = btn ? btn.textContent : '';
+            if (btn) {
+                btn.disabled = true;
+                btn.textContent = '测试中...';
+            }
+            try {
+                const res = await fetch('/api/models/test', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ model_key: modelKey }),
+                });
+                const data = await res.json().catch(() => ({}));
+                const category = data.category || '';
+                const measuredLatency = Number.isFinite(data.latency_ms) ? data.latency_ms : null;
+                if (data.ok) {
+                    markModelRecovered(item, measuredLatency);
+                    renderModelsStatsTable();
+                    showToast(`模型已恢复：${modelKeyLabel(item)}`, 'success');
+                    await fetchModelsStats();
+                    return true;
+                }
+                item.probe_status = category === 'auth' || category === 'model_not_found' ? 'failed' : 'recoverable';
+                item.probe_category = category;
+                item.latency_ms = measuredLatency;
+                item.probe_checked_at = Math.floor(Date.now() / 1000);
+                item.probe_error = data.error || `HTTP ${data.status || res.status}`;
+                renderModelsStatsTable();
+                showToast(item.probe_error || '模型测试失败', 'error');
+                await fetchModelsStats();
+                return false;
+            } catch (error) {
+                item.probe_status = 'recoverable';
+                item.probe_category = 'network';
+                item.probe_error = error.message || '模型测试失败';
+                renderModelsStatsTable();
+                showToast(item.probe_error, 'error');
+                return false;
+            } finally {
+                if (btn) {
+                    btn.disabled = false;
+                    btn.textContent = originText;
+                }
+            }
+        }
+
+        window.openPlaygroundForModel = async function(modelKeyToken, btn) {
             const modelKey = decodeURIComponent(modelKeyToken || '');
             if (!modelKey || !playgroundModelSelect) return;
 
@@ -1927,6 +1974,9 @@
                 showToast('未找到该模型', 'error');
                 return;
             }
+
+            const canOpen = await testModelForPlayground(item, btn);
+            if (!canOpen) return;
 
             renderPlaygroundModels();
             const previousValue = playgroundModelSelect.value;
@@ -4326,7 +4376,7 @@
                         
                         <!-- Switch (iOS toggle) -->
                         <td style="padding: 12px; vertical-align: middle; text-align: right; white-space: nowrap;">
-                            <button class="btn btn-secondary" style="padding: 4px 8px; font-size: 11px; margin-right: 8px;" onclick="openPlaygroundForModel('${modelKeyToken}')">测试</button>
+                            <button class="btn btn-secondary" style="padding: 4px 8px; font-size: 11px; margin-right: 8px;" onclick="openPlaygroundForModel('${modelKeyToken}', this)">测试</button>
                             <button class="btn btn-secondary" style="padding: 4px 8px; font-size: 11px; margin-right: 8px;" onclick="pinModelToTop('${modelKeyToken}', this)" ${index === 0 ? 'disabled' : ''}>&#x7f6e;&#x9876;</button>
                             <label class="switch" title="${isTempDisabled ? escapeHtml(`${disabledReasonLabel(item.disabled_reason)}${disabledUntilText ? `，禁用至 ${disabledUntilText}` : ''}`) : ''}">
                                 <input type="checkbox" ${item.enabled && !isAutoDisabled ? 'checked' : ''} ${isTempDisabled ? 'disabled' : ''} onchange="toggleModelEnabled('${item.provider}/${item.model}', this.checked)">
