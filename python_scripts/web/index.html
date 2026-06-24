@@ -2253,6 +2253,7 @@
                                     </div>
                                     <div class="keys-key-actions" style="display: flex; gap: 4px; margin-left: auto;">
                                         <button onclick="verifyProviderDirectly('${provider.id}', '${key.id}', this)" style="padding: 2px 8px; font-size: 11px;">${verify && verify.ok ? '重新验证' : '验证'}</button>
+                                        <button onclick="resetProviderModelState('${provider.id}', this)" style="padding: 2px 8px; font-size: 11px;">清记录</button>
                                         <button onclick="state.editing['${cacheKey}'] = true; renderProviderCards();" style="padding: 2px 8px; font-size: 11px;">编辑</button>
                                         <button class="remove" onclick="removeProviderKey('${provider.id}', '${key.id}')" style="padding: 2px 8px; font-size: 11px;">清除</button>
                                     </div>
@@ -2907,12 +2908,46 @@
             }
         };
 
+        window.resetProviderModelState = async function(providerId, btn) {
+            const originText = btn ? btn.textContent : '';
+            if (btn) {
+                btn.disabled = true;
+                btn.textContent = '清理中...';
+            }
+            try {
+                await requestJson(`/api/providers/${providerId}/reset-model-state`, { method: 'POST' });
+                currentModelsOrder = currentModelsOrder.filter((item) => item.provider !== providerId);
+                if (Array.isArray(localModelsOrder)) {
+                    localModelsOrder = localModelsOrder.filter((item) => item.provider !== providerId);
+                }
+                delete state.modelCache[providerId];
+                renderModelsStatsTable();
+                renderPlaygroundModels();
+                showToast(`${providerId} 记录已清空`, 'success');
+                await fetchModelsStats();
+            } catch (err) {
+                showToast(err.message || '清理失败', 'error');
+            } finally {
+                if (btn) {
+                    btn.disabled = false;
+                    btn.textContent = originText;
+                }
+            }
+        };
+
         window.verifyProviderDirectly = async function(providerId, keyId, btn) {
             btn.disabled = true;
             const originText = btn.textContent;
             btn.textContent = '验证中...';
             const cacheKey = providerId + '_' + keyId;
             try {
+                await requestJson(`/api/providers/${providerId}/reset-model-state`, { method: 'POST' });
+                currentModelsOrder = currentModelsOrder.filter((item) => item.provider !== providerId);
+                if (Array.isArray(localModelsOrder)) {
+                    localModelsOrder = localModelsOrder.filter((item) => item.provider !== providerId);
+                }
+                delete state.modelCache[providerId];
+                renderModelsStatsTable();
                 const data = await requestJson(`/api/provider-keys/${providerId}/${keyId}/verify`, { method: 'POST' });
                 state.verifyResults[cacheKey] = data;
                 showToast(`${providerId} 验证成功`, 'success');

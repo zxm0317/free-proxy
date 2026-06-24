@@ -729,6 +729,12 @@ class ProxyService:
         if hasattr(self, '_models_cache'):
             self._models_cache.pop(provider_name, None)
 
+    def reset_provider_model_state(self, provider_name: str) -> dict[str, object]:
+        provider = get_provider(provider_name)
+        self._clear_provider_model_state(provider.name)
+        self._clear_route_cache()
+        return {'ok': True, 'provider': provider.name}
+
     def delete_provider_key(self, provider_name: str, key_id: str | None = None) -> dict[str, object]:
         provider = get_provider(provider_name)
         if key_id is not None:

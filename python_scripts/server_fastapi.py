@@ -612,6 +612,15 @@ async def toggle_provider(provider_name: str, request: Request):
         return JSONResponse({'ok': False, 'error': str(exc)}, status_code=500)
 
 
+@app.post('/api/providers/{provider_name}/reset-model-state')
+async def reset_provider_model_state(provider_name: str):
+    svc = get_service()
+    try:
+        return svc.reset_provider_model_state(provider_name)
+    except Exception as exc:
+        return JSONResponse({'ok': False, 'error': str(exc)}, status_code=500)
+
+
 @app.post('/api/models/toggle')
 async def toggle_model(request: Request):
     payload, error_response = await _read_json_payload(request)
