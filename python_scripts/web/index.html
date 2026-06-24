@@ -3716,9 +3716,7 @@
                 });
                 if (res.ok) {
                     showToast('排序已保存');
-                    localModelsOrder = null;
                     document.getElementById('floatingSaveBar').style.display = 'none';
-                    await fetchModelsStats();
                 } else {
                     showToast('保存排序失败', 'error');
                 }
