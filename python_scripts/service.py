@@ -714,6 +714,7 @@ class ProxyService:
             raise ProviderError('api_key 不能为空')
             
         keys = self.get_provider_keys(provider_name)
+        changed_key: dict[str, object] | None = None
         
         if key_id is not None:
             target = next((k for k in keys if k['id'] == key_id), None)
@@ -724,17 +725,19 @@ class ProxyService:
                 target.pop('verified', None)
                 target.pop('verified_model', None)
                 target.pop('verified_at', None)
+                changed_key = target
             else:
                 raise ProviderError(f'Key ID {key_id} not found')
         else:
             new_id = secrets.token_hex(4)
             lbl = label.strip() or f"Key {len(keys) + 1}"
-            keys.append({
+            changed_key = {
                 'id': new_id,
                 'api_key': value,
                 'label': lbl,
                 'verified': False,
-            })
+            }
+            keys.append(changed_key)
             
         upsert_key(self.db_url, f"multi_keys_{provider_name}", json.dumps(keys))
         if keys:
@@ -742,8 +745,14 @@ class ProxyService:
             
         if hasattr(self, '_models_cache'):
             self._models_cache.pop(provider_name, None)
-            
-        return {'ok': True, 'provider': provider_name, 'masked': self._mask_key(value)}
+
+        key_info = {
+            'id': changed_key.get('id') if changed_key else key_id,
+            'masked': self._mask_key(value),
+            'label': (changed_key or {}).get('label') or label.strip() or 'Default',
+            'verified': False,
+        }
+        return {'ok': True, 'provider': provider_name, 'masked': self._mask_key(value), 'key': key_info, 'key_count': len(keys)}
 
     def mark_provider_key_verified(self, provider_name: str, key_id: str | None, verified_model: str) -> None:
         provider = get_provider(provider_name)

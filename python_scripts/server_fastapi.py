@@ -548,11 +548,12 @@ async def save_provider_key(provider: str, request: Request):
     if error_response is not None:
         return error_response
     api_key = str(payload.get('api_key', '')).strip()
+    label = str(payload.get('label', '')).strip()
     if not api_key:
         return JSONResponse({'ok': False, 'error': 'missing api_key'}, status_code=400)
     svc = get_service()
     try:
-        result = svc.configure_provider_key(provider, api_key)
+        result = svc.configure_provider_key(provider, api_key, label=label)
         return result
     except ProviderError as exc:
         return JSONResponse({'ok': False, 'error': str(exc)}, status_code=400)

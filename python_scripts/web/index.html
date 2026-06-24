@@ -2301,6 +2301,42 @@
             renderUnconfiguredFooter();
         }
 
+        function mergeProviderKeyResult(providerId, result, fallbackLabel) {
+            const provider = PROVIDERS.find((item) => item.id === providerId);
+            if (!provider) return;
+            const existing = state.statuses[providerId] || {};
+            const keys = Array.isArray(existing.keys) ? existing.keys.slice() : [];
+            const resultKey = result && result.key ? result.key : {};
+            const keyId = String(resultKey.id || `pending-${Date.now()}`);
+            const key = {
+                id: keyId,
+                masked: resultKey.masked || result?.masked || '••••••••',
+                label: resultKey.label || fallbackLabel || `Key ${keys.length + 1}`,
+                verified: resultKey.verified === true,
+                verified_model: resultKey.verified_model || '',
+                verified_at: resultKey.verified_at || null,
+            };
+            const index = keys.findIndex((item) => String(item.id || '') === keyId);
+            if (index >= 0) {
+                keys[index] = { ...keys[index], ...key };
+            } else {
+                keys.push(key);
+            }
+            state.statuses[providerId] = {
+                ...existing,
+                configured: true,
+                enabled: true,
+                masked: key.masked,
+                keys,
+            };
+            allProviderStatuses = state.statuses;
+            renderProviderCards();
+            renderProviderTabs();
+            populateAddProviderSelect();
+            renderUnconfiguredFooter();
+            document.getElementById('keysConfiguredProvidersList')?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+        }
+
         function renderAccountProviderCard(providerId, status) {
             const providerName = accountProviderName(providerId);
             const accounts = Array.isArray(status.accounts) ? status.accounts : [];
@@ -2852,15 +2888,17 @@
                 return;
             }
             try {
-                await requestJson(`/api/provider-keys/${platform}`, {
+                const data = await requestJson(`/api/provider-keys/${platform}`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ api_key: apiKey, label: label }),
                 });
+                mergeProviderKeyResult(platform, data, label);
                 document.getElementById('keys-api-key-input').value = '';
                 if (labelInput) labelInput.value = '';
                 showToast('API Key 已成功添加，请点击验证', 'success');
                 await loadStatuses();
+                mergeProviderKeyResult(platform, data, label);
             } catch (err) {
                 showToast(err.message || '添加失败', 'error');
             }
@@ -3213,7 +3251,9 @@
                     body: JSON.stringify({ api_key: apiKey }),
                 });
                 state.editing[providerId] = false;
+                mergeProviderKeyResult(providerId, data, '');
                 await loadStatuses();
+                mergeProviderKeyResult(providerId, data, '');
                 state.activeProvider = providerId;
                 persistSelection();
                 showToast(`${providerId} 已保存`);
