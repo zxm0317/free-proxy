@@ -1862,7 +1862,13 @@
 
         function playgroundAvailableModels() {
             return currentModelsOrder
-                .filter((item) => item && item.enabled !== false && item.probe_status === 'success' && item.analysis_status === 'ok')
+                .filter((item) =>
+                    item
+                    && item.enabled !== false
+                    && item.chat_candidate !== false
+                    && (item.probe_status === 'success' || item.probe_status === 'recoverable')
+                    && item.analysis_status === 'ok'
+                )
                 .map((item) => ({
                     value: `${item.provider}/${item.model}`,
                     label: modelKeyLabel(item),
@@ -1887,6 +1893,61 @@
             playgroundModelSelect.value = current === 'auto' || models.some((item) => item.value === current) ? current : 'auto';
             renderPlaygroundMessages();
         }
+
+        function switchToTab(tabName) {
+            const targetId = `pane-${tabName}`;
+            document.querySelectorAll('.nav-link').forEach((link) => {
+                link.classList.toggle('active', link.getAttribute('href') === `#${tabName}`);
+            });
+            document.querySelectorAll('.tab-pane').forEach((pane) => {
+                pane.classList.toggle('active', pane.id === targetId);
+            });
+            const hero = document.querySelector('.hero');
+            if (hero) {
+                hero.style.display = targetId === 'pane-models' ? 'block' : 'none';
+            }
+            if (tabName === 'models') {
+                fetchModelsStats();
+                startRuntimeModelStatusPolling();
+            } else if (tabName === 'analysis') {
+                fetchDetailedAnalytics();
+            }
+            if (window.location.hash !== `#${tabName}`) {
+                history.replaceState(null, '', `#${tabName}`);
+            }
+        }
+
+        window.openPlaygroundForModel = function(modelKeyToken) {
+            const modelKey = decodeURIComponent(modelKeyToken || '');
+            if (!modelKey || !playgroundModelSelect) return;
+
+            const sourceList = localModelsOrder || currentModelsOrder;
+            const item = sourceList.find((model) => `${model.provider}/${model.model}` === modelKey);
+            if (!item) {
+                showToast('未找到该模型', 'error');
+                return;
+            }
+
+            renderPlaygroundModels();
+            const previousValue = playgroundModelSelect.value;
+            const hasOption = Array.from(playgroundModelSelect.options).some((option) => option.value === modelKey);
+            if (!hasOption) {
+                const option = document.createElement('option');
+                const latency = Number.isFinite(item.latency_ms) ? ` · ${Math.round(item.latency_ms)} ms` : '';
+                option.value = modelKey;
+                option.textContent = `${modelKeyLabel(item)} · ${providerLabel(item)}${latency}`;
+                playgroundModelSelect.appendChild(option);
+            }
+            playgroundModelSelect.value = modelKey;
+
+            if (previousValue !== modelKey) {
+                playgroundChatMessages = [];
+            }
+            switchToTab('playground');
+            renderPlaygroundMessages();
+            window.setTimeout(() => playgroundInput?.focus(), 0);
+            showToast(`已切到操场：${modelKeyLabel(item)}`);
+        };
 
         function playgroundActiveModelLabel() {
             if (!playgroundModelSelect || playgroundModelSelect.value === 'auto') {
@@ -4197,6 +4258,7 @@
                         
                         <!-- Switch (iOS toggle) -->
                         <td style="padding: 12px; vertical-align: middle; text-align: right; white-space: nowrap;">
+                            <button class="btn btn-secondary" style="padding: 4px 8px; font-size: 11px; margin-right: 8px;" onclick="openPlaygroundForModel('${modelKeyToken}')">测试</button>
                             <button class="btn btn-secondary" style="padding: 4px 8px; font-size: 11px; margin-right: 8px;" onclick="pinModelToTop('${modelKeyToken}', this)" ${index === 0 ? 'disabled' : ''}>&#x7f6e;&#x9876;</button>
                             <label class="switch" title="${isTempDisabled ? escapeHtml(`${disabledReasonLabel(item.disabled_reason)}${disabledUntilText ? `，禁用至 ${disabledUntilText}` : ''}`) : ''}">
                                 <input type="checkbox" ${item.enabled && !isAutoDisabled ? 'checked' : ''} ${isTempDisabled ? 'disabled' : ''} onchange="toggleModelEnabled('${item.provider}/${item.model}', this.checked)">
