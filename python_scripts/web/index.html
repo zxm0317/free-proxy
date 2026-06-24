@@ -972,6 +972,46 @@
             background-color: #f1f3f0;
             opacity: 0.8;
         }
+        .provider-badge {
+            --provider-accent: #64748b;
+            --provider-bg: rgba(100, 116, 139, 0.12);
+            --provider-border: rgba(100, 116, 139, 0.28);
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            min-height: 22px;
+            padding: 2px 8px;
+            border-radius: 999px;
+            border: 1px solid var(--provider-border);
+            background: var(--provider-bg);
+            color: var(--provider-accent);
+            font-size: 11px;
+            font-weight: 800;
+            line-height: 1;
+            box-shadow: 0 1px 0 rgba(15, 23, 42, 0.04);
+            text-transform: none;
+            white-space: nowrap;
+        }
+        .provider-badge::before {
+            content: '';
+            width: 7px;
+            height: 7px;
+            border-radius: 999px;
+            background: var(--provider-accent);
+            box-shadow: 0 0 0 3px color-mix(in srgb, var(--provider-accent) 18%, transparent);
+        }
+        .provider-qoder { --provider-accent: #0f766e; --provider-bg: rgba(13, 148, 136, 0.13); --provider-border: rgba(13, 148, 136, 0.32); }
+        .provider-github { --provider-accent: #111827; --provider-bg: rgba(17, 24, 39, 0.10); --provider-border: rgba(17, 24, 39, 0.24); }
+        .provider-gemini, .provider-google { --provider-accent: #2563eb; --provider-bg: rgba(37, 99, 235, 0.12); --provider-border: rgba(37, 99, 235, 0.30); }
+        .provider-groq { --provider-accent: #dc2626; --provider-bg: rgba(220, 38, 38, 0.11); --provider-border: rgba(220, 38, 38, 0.28); }
+        .provider-sambanova { --provider-accent: #9333ea; --provider-bg: rgba(147, 51, 234, 0.12); --provider-border: rgba(147, 51, 234, 0.30); }
+        .provider-mistral { --provider-accent: #d97706; --provider-bg: rgba(217, 119, 6, 0.13); --provider-border: rgba(217, 119, 6, 0.30); }
+        .provider-openrouter { --provider-accent: #475569; --provider-bg: rgba(71, 85, 105, 0.12); --provider-border: rgba(71, 85, 105, 0.28); }
+        .provider-ollama { --provider-accent: #15803d; --provider-bg: rgba(21, 128, 61, 0.12); --provider-border: rgba(21, 128, 61, 0.30); }
+        .provider-cerebras { --provider-accent: #b91c1c; --provider-bg: rgba(185, 28, 28, 0.11); --provider-border: rgba(185, 28, 28, 0.28); }
+        .provider-nvidia { --provider-accent: #4d7c0f; --provider-bg: rgba(77, 124, 15, 0.13); --provider-border: rgba(77, 124, 15, 0.30); }
+        .provider-cohere { --provider-accent: #0891b2; --provider-bg: rgba(8, 145, 178, 0.12); --provider-border: rgba(8, 145, 178, 0.30); }
+        .provider-zhipu { --provider-accent: #7c3aed; --provider-bg: rgba(124, 58, 237, 0.12); --provider-border: rgba(124, 58, 237, 0.30); }
 
         /* Budget Card Styles */
         .budget-card {
@@ -4131,6 +4171,12 @@
             return item && item.provider_display ? item.provider_display : (item && item.provider ? item.provider : '');
         }
 
+        function providerBadgeHtml(item) {
+            const providerId = String((item && item.provider) || '').toLowerCase().replace(/[^a-z0-9_-]/g, '-');
+            const label = providerLabel(item);
+            return `<span class="provider-badge provider-${escapeHtml(providerId)}" title="${escapeHtml(label)}">${escapeHtml(label)}</span>`;
+        }
+
         function modelKeyLabel(item) {
             return item && item.model_key_display ? item.model_key_display : (item && item.model ? item.model : '');
         }
@@ -4217,7 +4263,7 @@
                                                 <div>${escapeHtml(primaryModelLabel(item))}</div>
                                                 ${secondaryModelLabel(item) ? `<div style="font-size: 11px; color: var(--muted); font-weight: 400; margin-top: 2px;">${escapeHtml(secondaryModelLabel(item))}</div>` : ''}
                                             </td>
-                                            <td style="padding: 10px 12px; color: var(--muted);">${escapeHtml(providerLabel(item))}</td>
+                                            <td style="padding: 10px 12px;">${providerBadgeHtml(item)}</td>
                                             <td style="padding: 10px 12px; color: var(--muted); text-align: right;">等待测速</td>
                                         </tr>
                                     `).join('')}
@@ -4247,7 +4293,7 @@
                         <div>${escapeHtml(primaryModelLabel(item))}</div>
                         ${secondaryModelLabel(item) ? `<div style="font-size: 11px; color: var(--muted); font-weight: 400; margin-top: 2px;">${escapeHtml(secondaryModelLabel(item))}</div>` : ''}
                     </td>
-                    <td style="padding: 10px 12px; color: var(--muted);">${escapeHtml(providerLabel(item))}</td>
+                    <td style="padding: 10px 12px;">${providerBadgeHtml(item)}</td>
                     <td style="padding: 10px 12px; text-align: right; font-family: monospace;">${Number.isFinite(item.latency_ms) ? `${Math.round(item.latency_ms)} ms` : '—'}</td>
                     <td style="padding: 10px 12px; color: var(--muted);">${escapeHtml(`${reason}${usage}`)}</td>
                 </tr>
@@ -4421,7 +4467,7 @@
                         <td style="padding: 12px; vertical-align: middle;">
                             <div style="display: flex; align-items: center; gap: 4px; flex-wrap: wrap;">
                                 <span style="font-weight: 600; font-size: 14px; color: var(--text);">${escapeHtml(primaryModelLabel(item))}</span>
-                                <span style="font-size: 11px; color: var(--muted); background: #f0f2f0; padding: 1px 5px; border-radius: 4px;">${escapeHtml(providerLabel(item))}</span>
+                                ${providerBadgeHtml(item)}
                                 ${secondaryModelLabel(item) ? `<span style="flex-basis: 100%; font-size: 12px; color: var(--muted);">${escapeHtml(secondaryModelLabel(item))}</span>` : ''}
                                 ${supportsVision ? '<span class="badge-tag tag-vision">想象</span>' : ''}
                                 ${supportsTools ? '<span class="badge-tag tag-tools">工具</span>' : ''}
