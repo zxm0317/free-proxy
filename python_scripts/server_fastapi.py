@@ -330,13 +330,9 @@ async def get_usage_stats():
 async def get_models_stats():
     svc = get_service()
     try:
-        return await run_in_threadpool(svc.models_stats)
+        return await run_in_threadpool(svc.models_stats_fallback)
     except Exception:
         logger.exception('models-stats route failed')
-        try:
-            return await run_in_threadpool(svc.models_stats_fallback)
-        except Exception:
-            logger.exception('models-stats fallback failed')
         return JSONResponse(
             {
                 'ok': False,
