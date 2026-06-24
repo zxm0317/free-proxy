@@ -62,11 +62,11 @@ QODER_STATIC_MODELS = [
 
 QODER_PROVIDER_ALIAS = 'qd'
 QODER_MODEL_DISPLAY_NAMES = {
-    'auto': 'Auto',
-    'ultimate': 'Ultimate',
-    'performance': 'Performance',
-    'efficient': 'Efficient',
-    'lite': 'Lite',
+    'auto': 'Qoder 自动路由',
+    'ultimate': 'Qoder Ultimate',
+    'performance': 'Qoder Performance',
+    'efficient': 'Qoder Efficient',
+    'lite': 'Qoder Lite',
     'qmodel': 'Qwen 3.6 Plus',
     'qmodel_latest': 'Qwen 3.7 Max',
     'dmodel': 'DeepSeek V4 Pro',
@@ -91,7 +91,9 @@ _PUBLIC_KEY = serialization.load_pem_public_key(QODER_RSA_PUBLIC_KEY)
 
 
 def qoder_model_display_name(model_id: str) -> str:
-    return QODER_MODEL_DISPLAY_NAMES.get(str(model_id or ''), str(model_id or ''))
+    raw = str(model_id or '')
+    display = QODER_MODEL_DISPLAY_NAMES.get(raw)
+    return f'{display} ({raw})' if display and display != raw else raw
 
 
 def qoder_model_key_display(model_id: str) -> str:

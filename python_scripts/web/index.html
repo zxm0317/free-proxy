@@ -1646,6 +1646,14 @@
                 .replaceAll("'", '&#39;');
         }
 
+        function jsStringLiteral(value) {
+            return JSON.stringify(String(value || ''))
+                .replaceAll('<', '\\u003c')
+                .replaceAll('>', '\\u003e')
+                .replaceAll('&', '\\u0026')
+                .replaceAll("'", '\\u0027');
+        }
+
         function formatDisabledUntil(ts) {
             if (!ts) return '';
             const date = new Date(Number(ts) * 1000);
@@ -2204,7 +2212,7 @@
                                         <span class="keys-key-status-text" style="font-size: 11px;">${escapeHtml(account.status || 'active')}</span>
                                     </div>
                                     <div class="keys-key-actions" style="display: flex; gap: 4px; margin-left: auto;">
-                                        <button onclick="removeAccountProviderAccount('${providerId}', '${account.id}')" style="padding: 2px 8px; font-size: 11px;">鍒犻櫎</button>
+                                        <button onclick='removeAccountProviderAccount(${jsStringLiteral(providerId)}, ${jsStringLiteral(account.id)})' style="padding: 2px 8px; font-size: 11px;">鍒犻櫎</button>
                                     </div>
                                 </div>
                             `).join('')}
@@ -2247,7 +2255,7 @@
                                     <span class="keys-key-status-text" style="font-size: 11px;">${escapeHtml(account.status || 'active')}</span>
                                 </div>
                                 <div class="keys-key-actions" style="display: flex; gap: 4px; margin-left: auto;">
-                                    <button onclick="removeAccountProviderAccount('${providerId}', '${account.id}')" style="padding: 2px 8px; font-size: 11px;">\u5220\u9664</button>
+                                    <button onclick='removeAccountProviderAccount(${jsStringLiteral(providerId)}, ${jsStringLiteral(account.id)})' style="padding: 2px 8px; font-size: 11px;">\u5220\u9664</button>
                                 </div>
                             </div>
                         `).join('')}
@@ -2969,7 +2977,16 @@
         window.removeAccountProviderAccount = async function(providerId, accountId) {
             if (!confirm('确定删除该账号吗？')) return;
             try {
-                await requestJson(`/api/account-providers/${providerId}/accounts/${accountId}`, { method: 'DELETE' });
+                await requestJson(`/api/account-providers/${encodeURIComponent(providerId)}/accounts/${encodeURIComponent(accountId)}`, { method: 'DELETE' });
+                currentModelsOrder = currentModelsOrder.filter((item) => item.provider !== providerId);
+                localModelsOrder = localModelsOrder ? localModelsOrder.filter((item) => item.provider !== providerId) : null;
+                if (state.selectedProvider === providerId) {
+                    state.selectedProvider = 'auto';
+                    state.selectedModel = 'auto';
+                    persistSelection();
+                }
+                renderModelsStatsTable();
+                renderPlaygroundModels();
                 showToast('账号已删除', 'success');
                 await loadStatuses();
                 await ensureVisibleModels(true);

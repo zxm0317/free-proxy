@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import secrets
 import time
@@ -13,6 +14,20 @@ AccountRecord = dict[str, Any]
 
 def _accounts_key(provider: str) -> str:
     return f'account_provider_accounts_{provider}'
+
+
+def _record_id(account: AccountRecord) -> str:
+    explicit = str(account.get('id') or '').strip()
+    if explicit:
+        return explicit
+    for field in ('user_id', 'email', 'label', 'name'):
+        value = str(account.get(field) or '').strip()
+        if value:
+            return f'{field}:{value}'
+    token = str(account.get('access_token') or account.get('refresh_token') or '').strip()
+    if token:
+        return f'token:{hashlib.sha256(token.encode("utf-8")).hexdigest()[:16]}'
+    return 'unknown'
 
 
 def load_accounts(db_url: str, provider: str) -> list[AccountRecord]:
@@ -56,7 +71,7 @@ def upsert_account(db_url: str, provider: str, account: AccountRecord) -> Accoun
 
 def delete_account(db_url: str, provider: str, account_id: str) -> bool:
     accounts = load_accounts(db_url, provider)
-    filtered = [item for item in accounts if str(item.get('id')) != account_id]
+    filtered = [item for item in accounts if _record_id(item) != account_id]
     save_accounts(db_url, provider, filtered)
     return len(filtered) != len(accounts)
 
@@ -69,7 +84,7 @@ def mask_token(value: str) -> str:
 
 def public_account(account: AccountRecord) -> AccountRecord:
     public = {
-        'id': account.get('id'),
+        'id': _record_id(account),
         'provider': account.get('provider'),
         'label': account.get('label') or account.get('email') or account.get('name') or account.get('id'),
         'name': account.get('name') or '',
@@ -86,4 +101,3 @@ def public_account(account: AccountRecord) -> AccountRecord:
     if isinstance(metadata, dict):
         public['metadata'] = {k: v for k, v in metadata.items() if k not in {'access_token', 'refresh_token'}}
     return public
-

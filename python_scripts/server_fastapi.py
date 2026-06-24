@@ -312,7 +312,7 @@ async def get_account_provider_accounts(provider: str):
     }
 
 
-@app.delete('/api/account-providers/{provider}/accounts/{account_id}', dependencies=[Depends(check_admin_auth)])
+@app.delete('/api/account-providers/{provider}/accounts/{account_id:path}', dependencies=[Depends(check_admin_auth)])
 async def delete_account_provider_account(provider: str, account_id: str):
     try:
         return await run_in_threadpool(get_service().delete_account_provider_account, provider, account_id)

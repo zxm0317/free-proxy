@@ -551,6 +551,7 @@ class ProxyService:
         self._clear_account_provider_cache(provider_name)
         if provider_name == 'qoder':
             self._clear_provider_model_state('qoder')
+        self._clear_route_cache()
         return {'ok': True, 'provider': provider_name, 'id': account_id}
 
     def validate_account_provider(self, provider_name: str) -> dict[str, object]:
