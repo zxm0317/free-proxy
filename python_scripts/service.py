@@ -12,7 +12,7 @@ from pathlib import Path
 
 from .config import DOTENV_PATH, hydrate_env, load_dotenv
 from .account_provider_store import delete_account, load_accounts, public_account, save_accounts, upsert_account
-from .db_store import get_all_keys, get_key, init_db, upsert_key, increment_model_usage, get_model_usage_stats, get_manual_order, save_manual_order, log_request, get_model_probe_results, save_model_probe_result, delete_model_probe_results_for_provider
+from .db_store import get_all_keys, get_key, init_db, upsert_key, increment_model_usage, get_model_usage_stats, get_manual_order, save_manual_order, log_request, get_model_probe_results, save_model_probe_result, delete_model_probe_results_for_provider, delete_request_logs_for_provider
 from .errors import classify_error, is_permanent_unavailable_category, remediation_suggestion
 from .health_store import load_health, temporary_disabled_models, upsert_health, delete_health_for_provider
 from .openai_relay import OpenAIRelay
@@ -720,6 +720,7 @@ class ProxyService:
 
     def _clear_provider_model_state(self, provider_name: str) -> None:
         delete_model_probe_results_for_provider(self.db_url, provider_name)
+        delete_request_logs_for_provider(self.db_url, provider_name)
         delete_health_for_provider(provider_name, self.health_path)
         disabled_models = [key for key in self._persistent_disabled_models() if not key.startswith(f'{provider_name}/')]
         upsert_key(self.db_url, 'disabled_models', json.dumps(disabled_models))
@@ -1132,6 +1133,8 @@ class ProxyService:
         return get_key(self.db_url, 'ADMIN_PASSWORD') or ''
 
     def verify_provider_key(self, provider_name: str, key_id: str | None = None) -> dict[str, object]:
+        self._clear_provider_model_state(provider_name)
+
         def diagnose(exc: ProviderError) -> tuple[str, int | None, str]:
             if isinstance(exc, ProviderHTTPError):
                 category = exc.category

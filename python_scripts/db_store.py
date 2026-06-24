@@ -383,6 +383,14 @@ def delete_model_probe_results_for_provider(db_url: str, provider_id: str) -> No
     finally:
         adapter.close()
 
+def delete_request_logs_for_provider(db_url: str, provider_id: str) -> None:
+    adapter = get_adapter(db_url)
+    try:
+        adapter.execute("DELETE FROM requests WHERE platform = %s", (provider_id,))
+        adapter.commit()
+    finally:
+        adapter.close()
+
 _manual_order_cache: list[str] | None = None
 _manual_order_cache_ts: float = 0
 
