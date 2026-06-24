@@ -95,6 +95,8 @@ def public_account(account: AccountRecord) -> AccountRecord:
         'updated_at': account.get('updated_at'),
         'last_used_at': account.get('last_used_at'),
         'expires_at': account.get('expires_at'),
+        'models_loaded': bool(account.get('models_loaded')),
+        'models_loaded_at': account.get('models_loaded_at'),
         'token': mask_token(str(account.get('access_token') or '')),
     }
     metadata = account.get('metadata')

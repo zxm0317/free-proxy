@@ -451,6 +451,12 @@ class ProxyService:
             if account.get('status', 'active') == 'active' and str(account.get('access_token') or '').strip()
         ]
 
+    def _loaded_account_provider_accounts(self, provider_name: str) -> list[dict[str, object]]:
+        return [
+            account for account in self._active_account_provider_accounts(provider_name)
+            if account.get('models_loaded') is True
+        ]
+
     def _select_account_provider_account(self, provider_name: str, key_id: str | None = None) -> dict[str, object]:
         accounts = self._active_account_provider_accounts(provider_name)
         if key_id is not None:
@@ -489,7 +495,7 @@ class ProxyService:
             'qoder': {
                 'provider': 'qoder',
                 'name': 'Qoder',
-                'configured': bool(self._active_account_provider_accounts('qoder')),
+                'configured': bool(self._loaded_account_provider_accounts('qoder')),
                 'accounts': [public_account(account) for account in self.account_provider_accounts('qoder')],
                 'supports_login': True,
                 'supports_round_robin': True,
@@ -561,6 +567,16 @@ class ProxyService:
             models = self.list_models(provider_name)
         except Exception as exc:
             return {'ok': False, 'provider': provider_name, 'error': str(exc), 'models': []}
+        accounts = self.account_provider_accounts(provider_name)
+        changed = False
+        for account in accounts:
+            if account.get('status', 'active') == 'active' and str(account.get('access_token') or '').strip():
+                account['models_loaded'] = True
+                account['models_loaded_at'] = int(time.time())
+                changed = True
+        if changed:
+            save_accounts(self.db_url, provider_name, accounts)
+            self._set_account_provider_cache(provider_name, accounts)
         return {'ok': True, 'provider': provider_name, 'models': models, 'account_count': len(self._active_account_provider_accounts(provider_name))}
 
     def probe_account_provider_models(self, provider_name: str) -> dict[str, object]:
@@ -1562,7 +1578,7 @@ class ProxyService:
         
         configured_names = configured_provider_names(db_keys)
         for provider_name in ('qoder',):
-            if self._active_account_provider_accounts(provider_name) and provider_name not in configured_names:
+            if self._loaded_account_provider_accounts(provider_name) and provider_name not in configured_names:
                 configured_names.append(provider_name)
         all_configured = list(configured_names)
         custom_provider_names = {
@@ -1859,7 +1875,7 @@ class ProxyService:
             configured_names = []
 
         try:
-            if self._active_account_provider_accounts('qoder') and 'qoder' not in configured_names:
+            if self._loaded_account_provider_accounts('qoder') and 'qoder' not in configured_names:
                 configured_names.append('qoder')
         except Exception:
             logger.exception('models_stats_fallback qoder detection failed')
