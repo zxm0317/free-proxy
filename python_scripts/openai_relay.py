@@ -436,14 +436,21 @@ class OpenAIRelay:
             _trace_relay('skip_unavailable_models', models=','.join(sorted(health_unavailable_models[:20])), count=len(health_unavailable_models))
         step_start = time.time()
         routed_candidates = []
-        if (not requested_model or requested_model in {'auto', 'free-proxy/auto', 'free_proxy/auto'}) and callable(self.route_order_loader):
+        is_auto_request = not requested_model or requested_model in {'auto', 'free-proxy/auto', 'free_proxy/auto'}
+        direct_model_request = bool(requested_model and not is_auto_request and '/' in requested_model)
+        explicit_candidates: list[CandidateTarget] = []
+        if direct_model_request and requested_model:
+            provider_name, model_id = requested_model.split('/', 1)
+            if provider_name in configured_providers and model_id:
+                explicit_candidates = [CandidateTarget(provider_name, model_id, 'user_requested', 0)]
+        if is_auto_request and callable(self.route_order_loader):
             loaded_route_order = self.route_order_loader()
             routed_candidates = [
                 CandidateTarget(provider, model, 'provider_default', index)
                 for index, (provider, model) in enumerate(loaded_route_order or [])
             ]
         candidates = self._prioritize_interactive_clients(
-            routed_candidates or build_auto_candidates(
+            explicit_candidates if direct_model_request else routed_candidates or build_auto_candidates(
                 requested_model=requested_model,
                 configured=configured_providers,
                 health=health_state,
@@ -462,7 +469,7 @@ class OpenAIRelay:
         index = 0
         route_build_ms = int((time.time() - overall_start) * 1000)
         error_details = []
-        max_total_attempts = max(1, min(len(candidates), settings.max_fallback_attempts))
+        max_total_attempts = 1 if direct_model_request else max(1, min(len(candidates), settings.max_fallback_attempts))
         attempted_count = 0
         _trace_relay(
             'route_built',
@@ -527,7 +534,7 @@ class OpenAIRelay:
                     int((time.time() - start_time) * 1000),
                     error_msg,
                 )
-                if failure.category != 'auth' and candidate.provider not in listed_loaded:
+                if not direct_model_request and failure.category != 'auth' and candidate.provider not in listed_loaded:
                     listed_loaded.add(candidate.provider)
                     candidates = self._append_provider_listed_candidate(candidates, candidate.provider, index)
                 decision = decide_next_action(FallbackContext(attempted_count, same_provider_attempts, max_total_attempts=max_total_attempts), RelayAttemptResult(False, candidate.provider, candidate.model, failure.category, None, None, str(exc)))
@@ -904,7 +911,7 @@ class OpenAIRelay:
             if failure.category in ('server', 'network', 'rate_limit', 'auth', 'quota', 'model_not_found'):
                 self._record_health(candidate.provider, candidate.model, False, failure.category)
                 
-            if failure.category != 'auth' and candidate.provider not in listed_loaded:
+            if not direct_model_request and failure.category != 'auth' and candidate.provider not in listed_loaded:
                 listed_loaded.add(candidate.provider)
                 candidates = self._append_provider_listed_candidate(candidates, candidate.provider, index)
             decision = decide_next_action(FallbackContext(attempted_count, same_provider_attempts, max_total_attempts=max_total_attempts), RelayAttemptResult(False, candidate.provider, candidate.model, failure.category, adapter_response.status, None, failure.message))
