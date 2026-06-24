@@ -2976,7 +2976,11 @@
         window.removeAccountProviderAccount = async function(providerId, accountId) {
             if (!confirm('确定删除该账号吗？')) return;
             try {
-                await requestJson(`/api/account-providers/${encodeURIComponent(providerId)}/accounts/${encodeURIComponent(accountId)}`, { method: 'DELETE' });
+                await requestJson(`/api/account-providers/${encodeURIComponent(providerId)}/accounts/delete`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ account_id: accountId || '' }),
+                });
                 currentModelsOrder = currentModelsOrder.filter((item) => item.provider !== providerId);
                 localModelsOrder = localModelsOrder ? localModelsOrder.filter((item) => item.provider !== providerId) : null;
                 if (state.selectedProvider === providerId) {
@@ -2990,7 +2994,7 @@
                 await loadStatuses();
                 await ensureVisibleModels(true);
             } catch (err) {
-                showToast(err.message || '删除失败', 'error');
+                showToast(err.message ? `删除失败：${err.message}` : '删除失败', 'error');
             }
         };
 

@@ -5,6 +5,7 @@ import json
 import secrets
 import time
 from typing import Any
+from urllib.parse import unquote
 
 from .db_store import get_key, upsert_key
 
@@ -28,6 +29,19 @@ def _record_id(account: AccountRecord) -> str:
     if token:
         return f'token:{hashlib.sha256(token.encode("utf-8")).hexdigest()[:16]}'
     return 'unknown'
+
+
+def _candidate_ids(account: AccountRecord) -> set[str]:
+    values = {_record_id(account)}
+    for field in ('id', 'user_id', 'email', 'label', 'name'):
+        value = str(account.get(field) or '').strip()
+        if value:
+            values.add(value)
+            values.add(f'{field}:{value}')
+    token = str(account.get('access_token') or account.get('refresh_token') or '').strip()
+    if token:
+        values.add(f'token:{hashlib.sha256(token.encode("utf-8")).hexdigest()[:16]}')
+    return values
 
 
 def load_accounts(db_url: str, provider: str) -> list[AccountRecord]:
@@ -71,7 +85,8 @@ def upsert_account(db_url: str, provider: str, account: AccountRecord) -> Accoun
 
 def delete_account(db_url: str, provider: str, account_id: str) -> bool:
     accounts = load_accounts(db_url, provider)
-    filtered = [item for item in accounts if _record_id(item) != account_id]
+    target = unquote(str(account_id or '').strip())
+    filtered = [item for item in accounts if target not in _candidate_ids(item)]
     save_accounts(db_url, provider, filtered)
     return len(filtered) != len(accounts)
 

@@ -553,6 +553,13 @@ class ProxyService:
     def delete_account_provider_account(self, provider_name: str, account_id: str) -> dict[str, object]:
         deleted = delete_account(self.db_url, provider_name, account_id)
         if not deleted:
+            accounts = self.account_provider_accounts(provider_name)
+            if len(accounts) == 1:
+                fallback_id = str(public_account(accounts[0]).get('id') or '')
+                deleted = delete_account(self.db_url, provider_name, fallback_id)
+                if deleted:
+                    account_id = fallback_id
+        if not deleted:
             raise ProviderError('account not found')
         self._clear_account_provider_cache(provider_name)
         if provider_name == 'qoder':

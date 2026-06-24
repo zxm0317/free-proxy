@@ -320,6 +320,18 @@ async def delete_account_provider_account(provider: str, account_id: str):
         return JSONResponse({'ok': False, 'error': str(exc)}, status_code=400)
 
 
+@app.post('/api/account-providers/{provider}/accounts/delete', dependencies=[Depends(check_admin_auth)])
+async def delete_account_provider_account_post(provider: str, request: Request):
+    payload, error_response = await _read_json_payload(request)
+    if error_response is not None:
+        return error_response
+    account_id = str(payload.get('account_id') or '').strip()
+    try:
+        return await run_in_threadpool(get_service().delete_account_provider_account, provider, account_id)
+    except ProviderError as exc:
+        return JSONResponse({'ok': False, 'error': str(exc)}, status_code=400)
+
+
 @app.post('/api/account-providers/{provider}/validate', dependencies=[Depends(check_admin_auth)])
 async def validate_account_provider(provider: str):
     return await run_in_threadpool(get_service().validate_account_provider, provider)
