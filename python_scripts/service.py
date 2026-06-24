@@ -1399,11 +1399,11 @@ class ProxyService:
                 """,
                 (since_value,),
             )
-            error_rows = adapter.fetchall(
+            recent_rows = adapter.fetchall(
                 """
-                SELECT platform, model_id, error
+                SELECT platform, model_id, status, error
                 FROM requests
-                WHERE status = 'error' AND created_at >= %s
+                WHERE created_at >= %s
                 ORDER BY created_at DESC
                 """,
                 (since_value,),
@@ -1413,11 +1413,11 @@ class ProxyService:
         finally:
             adapter.close()
 
-        recent_errors: dict[str, str] = {}
-        for provider, model, error in error_rows:
+        latest_events: dict[str, tuple[str, str]] = {}
+        for provider, model, status, error in recent_rows:
             key = f'{provider}/{model}'
-            if key not in recent_errors:
-                recent_errors[key] = str(error or '')
+            if key not in latest_events:
+                latest_events[key] = (str(status or ''), str(error or ''))
 
         def classify_hide_reason(request_count: int, success_rate: float | None, recent_error: str) -> str:
             error_lower = recent_error.lower()
@@ -1444,7 +1444,8 @@ class ProxyService:
             count = int(request_count or 0)
             successes = int(success_count or 0)
             success_rate = (successes / count * 100) if count else None
-            recent_error = recent_errors.get(key, '')
+            latest_status, latest_error = latest_events.get(key, ('', ''))
+            recent_error = '' if latest_status == 'success' else latest_error
             hide_reason = classify_hide_reason(count, success_rate, recent_error)
             analysis[key] = {
                 'usage_count': count,
@@ -1670,9 +1671,15 @@ class ProxyService:
             if is_unavailable_model:
                 reason_for_label = health_reason or probe_category
                 unavailable_error = 'API Key 无效或权限不足' if reason_for_label == 'auth' else '模型不存在或不可用'
+            analysis_success_count = int(analysis.get('success_count') or 0)
+            recent_error = str(analysis.get('recent_error') or '')
+            if analysis_success_count > 0 and not recent_error:
+                is_unavailable_model = False
+                is_recoverable_model = False
+                unavailable_error = ''
             probe_status = (
                 'failed' if is_unavailable_model
-                else 'success' if probe_ok is True
+                else 'success' if probe_ok is True or analysis_success_count > 0
                 else 'recoverable' if is_recoverable_model
                 else 'untested'
             )
@@ -1871,12 +1878,13 @@ class ProxyService:
                 if not isinstance(analysis, dict):
                     analysis = {}
                 recent_error = str(analysis.get('recent_error') or '')
+                analysis_success_count = int(analysis.get('success_count') or 0)
                 inferred_category = probe_category
                 if not inferred_category and recent_error:
                     inferred_category = classify_error(0, recent_error).category
                 probe_status = (
                     'failed' if is_permanent_unavailable_category(inferred_category)
-                    else 'success' if probe_ok is True
+                    else 'success' if probe_ok is True or analysis_success_count > 0
                     else 'recoverable' if inferred_category in {'server', 'network', 'rate_limit', 'quota', 'unknown'} and bool(recent_error)
                     else 'recoverable' if probe_ok is False
                     else 'untested'
