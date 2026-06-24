@@ -1124,6 +1124,11 @@ class ProxyService:
         upsert_key(self.db_url, 'PROXY_API_KEY', new_key)
         return new_key
 
+    def keep_database_alive(self) -> dict[str, object]:
+        now_ts = int(time.time())
+        upsert_key(self.db_url, 'db_keepalive_last_seen_at', str(now_ts))
+        return {'ok': True, 'last_seen_at': now_ts}
+
     def _ensure_admin_password(self) -> None:
         admin_pwd = get_key(self.db_url, 'ADMIN_PASSWORD')
         if not admin_pwd:
