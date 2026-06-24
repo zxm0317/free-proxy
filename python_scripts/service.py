@@ -1655,10 +1655,9 @@ class ProxyService:
                 reason_for_label = health_reason or probe_category
                 unavailable_error = 'API Key 无效或权限不足' if reason_for_label == 'auth' else '模型不存在或不可用'
             probe_status = (
-                'success' if isinstance(probe_latency_ms, int)
-                else 'failed' if is_unavailable_model
-                else 'recoverable' if is_recoverable_model
+                'failed' if is_unavailable_model
                 else 'success' if probe_ok is True
+                else 'recoverable' if is_recoverable_model
                 else 'untested'
             )
             is_failed_probe = probe_status == 'failed'
@@ -1774,6 +1773,12 @@ class ProxyService:
             probe_results = {}
 
         try:
+            analysis_stats = self._model_analysis_stats()
+        except Exception:
+            logger.exception('models_stats_fallback analysis load failed')
+            analysis_stats = {}
+
+        try:
             configured_names = configured_provider_names(db_keys)
         except Exception:
             logger.exception('models_stats_fallback provider detection failed')
@@ -1846,11 +1851,17 @@ class ProxyService:
                         probe_category = classify_error(int(probe_status_code or 0), probe_error).category
                     except Exception:
                         probe_category = classify_error(0, probe_error).category
+                analysis = analysis_stats.get(key, {}) if isinstance(analysis_stats, dict) else {}
+                if not isinstance(analysis, dict):
+                    analysis = {}
+                recent_error = str(analysis.get('recent_error') or '')
+                inferred_category = probe_category
+                if not inferred_category and recent_error:
+                    inferred_category = classify_error(0, recent_error).category
                 probe_status = (
-                    'success' if isinstance(probe_latency_ms, int)
-                    else 'failed' if is_permanent_unavailable_category(probe_category)
-                    else 'recoverable' if probe_ok is False
+                    'failed' if is_permanent_unavailable_category(inferred_category)
                     else 'success' if probe_ok is True
+                    else 'recoverable' if probe_ok is False
                     else 'untested'
                 )
                 try:
@@ -1891,13 +1902,13 @@ class ProxyService:
                     'temporarily_disabled': False,
                     'disabled_until': None,
                     'disabled_reason': '',
-                    'usage_count': 0,
-                    'success_count': 0,
-                    'success_rate': None,
-                    'avg_latency_ms': None,
-                    'recent_error': '',
-                    'analysis_status': 'ok',
-                    'hide_reason': '',
+                    'usage_count': analysis.get('usage_count', 0),
+                    'success_count': analysis.get('success_count', 0),
+                    'success_rate': analysis.get('success_rate'),
+                    'avg_latency_ms': analysis.get('avg_latency_ms'),
+                    'recent_error': recent_error,
+                    'analysis_status': analysis.get('analysis_status', 'ok'),
+                    'hide_reason': analysis.get('hide_reason', ''),
                     'chat_candidate': chat_candidate,
                 })
 

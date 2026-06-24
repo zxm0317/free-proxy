@@ -3357,7 +3357,7 @@
                     const data = await res.json();
                     const category = data.category || '';
                     const measuredLatency = Number.isFinite(data.latency_ms) ? data.latency_ms : null;
-                    item.probe_status = measuredLatency !== null || data.ok ? 'success' : (category === 'auth' || category === 'model_not_found' ? 'failed' : 'recoverable');
+                    item.probe_status = data.ok ? 'success' : (category === 'auth' || category === 'model_not_found' ? 'failed' : 'recoverable');
                     item.probe_category = category;
                     item.latency_ms = measuredLatency;
                     item.probe_checked_at = Math.floor(Date.now() / 1000);
@@ -3473,7 +3473,7 @@
                     const data = await res.json();
                     const category = data.category || '';
                     const measuredLatency = Number.isFinite(data.latency_ms) ? data.latency_ms : null;
-                    item.probe_status = measuredLatency !== null || data.ok ? 'success' : (category === 'auth' || category === 'model_not_found' ? 'failed' : 'recoverable');
+                    item.probe_status = data.ok ? 'success' : (category === 'auth' || category === 'model_not_found' ? 'failed' : 'recoverable');
                     item.probe_category = category;
                     item.latency_ms = measuredLatency;
                     item.probe_checked_at = Math.floor(Date.now() / 1000);
