@@ -1559,7 +1559,7 @@ class ProxyService:
                 return [k.split('/', 1)[1] for k in known_model_keys if k.startswith(f'{p_name}/')]
             elif p_name.startswith('custom-'):
                 return []
-            return self.get_cached_provider_models(p_name, refresh=p_name == 'ollama')
+            return self.get_cached_provider_models(p_name, refresh=False)
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=min(20, max(1, len(configured_names)))) as executor:
             futures = {executor.submit(fetch_p, p_name): p_name for p_name in configured_names}
