@@ -3759,9 +3759,7 @@
                     return;
                 }
                 showToast('\u5df2\u7f6e\u9876\u5e76\u4fdd\u5b58');
-                localModelsOrder = null;
                 document.getElementById('floatingSaveBar').style.display = 'none';
-                await fetchModelsStats();
             } catch (err) {
                 console.error(err);
                 showToast('\u7f51\u7edc\u9519\u8bef\uff0c\u7f6e\u9876\u5931\u8d25', 'error');
