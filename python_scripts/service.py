@@ -32,6 +32,22 @@ JsonObject = dict[str, object]
 logger = logging.getLogger(__name__)
 
 
+def _looks_like_embedded_provider_error(content: str | None) -> bool:
+    text = (content or '').lower()
+    return any(
+        token in text
+        for token in (
+            '[qoder error',
+            'pricingurl',
+            'requires a subscription',
+            'subscription required',
+            '"code":"112"',
+            '"code": "112"',
+            'code 112',
+        )
+    )
+
+
 @dataclass(frozen=True)
 class ProbeResult:
     provider: str
@@ -1286,6 +1302,15 @@ class ProxyService:
             )
             try:
                 content = adapter.chat_text(candidate, budget.trimmed_prompt, max_tokens=budget.output_tokens_limit, timeout=timeout)
+                if _looks_like_embedded_provider_error(content):
+                    failure = classify_error(0, content)
+                    last_error = content
+                    last_category = failure.category
+                    last_status = None
+                    upsert_health(provider_name, candidate, False, reason=last_category, path=self.health_path)
+                    if record_runtime:
+                        self.mark_runtime_model_finish(provider_name, candidate, False, int((time.time() - attempt_start) * 1000), content)
+                    continue
                 upsert_health(provider_name, candidate, True, path=self.health_path)
                 if record_runtime:
                     self.mark_runtime_model_finish(provider_name, candidate, True, int((time.time() - attempt_start) * 1000), None)
@@ -1325,6 +1350,15 @@ class ProxyService:
                     )
                     try:
                         retry_content = adapter.chat_text(candidate, retry_budget.trimmed_prompt, max_tokens=retry_budget.output_tokens_limit, timeout=timeout)
+                        if _looks_like_embedded_provider_error(retry_content):
+                            failure = classify_error(0, retry_content)
+                            last_error = retry_content
+                            last_category = failure.category
+                            last_status = None
+                            upsert_health(provider_name, candidate, False, reason=last_category, path=self.health_path)
+                            if record_runtime:
+                                self.mark_runtime_model_finish(provider_name, candidate, False, int((time.time() - attempt_start) * 1000), retry_content)
+                            continue
                         upsert_health(provider_name, candidate, True, path=self.health_path)
                         if record_runtime:
                             self.mark_runtime_model_finish(provider_name, candidate, True, int((time.time() - attempt_start) * 1000), None)

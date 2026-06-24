@@ -1793,6 +1793,40 @@
             return '';
         }
 
+        function classifyEmbeddedAssistantFailure(content) {
+            const text = String(content || '').trim();
+            const lower = text.toLowerCase();
+            if (!lower) return null;
+            const looksLikeEmbeddedError = lower.includes('[qoder error')
+                || lower.includes('pricingurl')
+                || lower.includes('requires a subscription')
+                || lower.includes('subscription required')
+                || lower.includes('"code":"112"')
+                || lower.includes('"code": "112"')
+                || lower.includes('code 112');
+            if (!looksLikeEmbeddedError) return null;
+            if (
+                lower.includes('pricingurl')
+                || lower.includes('requires a subscription')
+                || lower.includes('subscription required')
+                || lower.includes('"code":"112"')
+                || lower.includes('"code": "112"')
+                || lower.includes('code 112')
+            ) {
+                return { category: 'model_not_found', message: '模型不存在或不可用' };
+            }
+            if (/\[qoder error\s+(401|403)\b/i.test(text) || /api key|权限不足|无效|forbidden|unauthorized/i.test(text)) {
+                return { category: 'auth', message: 'API Key 无效或权限不足' };
+            }
+            if (/\[qoder error\s+(404|410)\b/i.test(text) || /模型不存在|模型不可用|not found|not available|does not exist/i.test(text)) {
+                return { category: 'model_not_found', message: '模型不存在或不可用' };
+            }
+            if (/上游服务异常|service unavailable|upstream|server/i.test(text)) {
+                return { category: 'server', message: '上游服务异常' };
+            }
+            return { category: 'recoverable', message: text.slice(0, 200) };
+        }
+
         async function requestStream(url, options = {}, onChunk) {
             const response = await fetch(url, options);
             
@@ -1945,21 +1979,22 @@
                 const data = await res.json().catch(() => ({}));
                 const measuredLatency = Date.now() - startedAt;
                 const content = res.ok ? extractChatTextFromJsonPayload(data) : '';
-                if (res.ok && content.trim()) {
+                const embeddedFailure = res.ok ? classifyEmbeddedAssistantFailure(content) : null;
+                if (res.ok && content.trim() && !embeddedFailure) {
                     markModelRecovered(item, measuredLatency);
                     renderModelsStatsTable();
                     showToast(`模型已恢复：${modelKeyLabel(item)}`, 'success');
                     await fetchModelsStats();
                     return true;
                 }
-                const errMessage = data.error?.message || data.error || `HTTP ${res.status}`;
-                const category = res.status === 401 || res.status === 403
+                const errMessage = embeddedFailure?.message || data.error?.message || data.error || `HTTP ${res.status}`;
+                const category = embeddedFailure?.category || (res.status === 401 || res.status === 403
                     ? 'auth'
                     : res.status === 404 || res.status === 410 || /模型不存在|模型不可用|not found|not available|does not exist/i.test(String(errMessage))
                         ? 'model_not_found'
                         : /上游服务异常|service unavailable|upstream/i.test(String(errMessage))
                             ? 'server'
-                            : 'recoverable';
+                            : 'recoverable');
                 item.probe_status = category === 'auth' || category === 'model_not_found' ? 'failed' : 'recoverable';
                 item.probe_category = category;
                 item.latency_ms = measuredLatency;

@@ -45,6 +45,13 @@ def classify_error(status: int, body_text: str) -> ProviderFailure:
         'model unavailable',
         'model does not exist',
         'model is not available',
+        'requires a subscription',
+        'subscription required',
+        'pricingurl',
+        'pricing url',
+        '"code":"112"',
+        '"code": "112"',
+        'code 112',
         '模型不存在',
         '模型不可用',
     )

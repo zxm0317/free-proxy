@@ -17,6 +17,22 @@ from .response_normalizer import RelayResponse, normalize_provider_response, san
 from .token_policy import DEFAULT_POLICY, TokenPolicy, model_default_output_tokens, response_token_budget, trim_prompt
 
 
+def _looks_like_embedded_provider_error(content: str | None) -> bool:
+    text = (content or '').lower()
+    return any(
+        token in text
+        for token in (
+            '[qoder error',
+            'pricingurl',
+            'requires a subscription',
+            'subscription required',
+            '"code":"112"',
+            '"code": "112"',
+            'code 112',
+        )
+    )
+
+
 @dataclass(frozen=True)
 class RelayAttemptResult:
     ok: bool
@@ -549,6 +565,49 @@ class OpenAIRelay:
                 if decision.action == 'stop':
                     break
                 continue
+            if adapter_response.status < 400 and adapter_response.stream is None and adapter_response.body:
+                embedded_body_text = adapter_response.body.decode('utf-8', errors='ignore')
+                if _looks_like_embedded_provider_error(embedded_body_text):
+                    failure = classify_error(adapter_response.status, embedded_body_text)
+                    elapsed_ms = int((time.time() - start_time) * 1000)
+                    _trace_relay(
+                        'attempt_embedded_error',
+                        attempt=attempted_count,
+                        provider=candidate.provider,
+                        model=candidate.model,
+                        elapsed_ms=elapsed_ms,
+                        category=failure.category,
+                        message=failure.message,
+                    )
+                    if self.runtime_model_finish:
+                        try:
+                            self.runtime_model_finish(candidate.provider, candidate.model, False, elapsed_ms, failure.message)
+                        except Exception:
+                            pass
+                    self._record_health(candidate.provider, candidate.model, False, failure.category)
+                    error_details.append(f"{candidate.provider}/{candidate.model}: {failure.message[:200]}")
+                    self._log_request_async(
+                        candidate.provider,
+                        candidate.model,
+                        'error',
+                        len(self._prompt_from_messages(request.messages)) // 4,
+                        0,
+                        elapsed_ms,
+                        failure.message,
+                    )
+                    decision = decide_next_action(FallbackContext(attempted_count, same_provider_attempts, max_total_attempts=max_total_attempts), RelayAttemptResult(False, candidate.provider, candidate.model, failure.category, adapter_response.status, None, failure.message))
+                    _trace_relay(
+                        'fallback_decision',
+                        attempt=attempted_count,
+                        provider=candidate.provider,
+                        model=candidate.model,
+                        action=decision.action,
+                        category=failure.category,
+                        status=adapter_response.status,
+                    )
+                    if decision.action == 'stop':
+                        break
+                    continue
             if adapter_response.status < 400:
                 elapsed_ms = int((time.time() - start_time) * 1000)
                 _trace_relay(
