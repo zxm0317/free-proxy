@@ -4136,7 +4136,26 @@
         }
 
         function modelNameLabel(item) {
-            return item && item.model_display ? item.model_display : '';
+            if (item && item.model_display) return item.model_display;
+            if (item && item.provider === 'qoder') {
+                const names = {
+                    auto: 'Qoder 自动路由',
+                    ultimate: 'Qoder Ultimate',
+                    performance: 'Qoder Performance',
+                    efficient: 'Qoder Efficient',
+                    lite: 'Qoder Lite',
+                    qmodel: 'Qwen 3.6 Plus',
+                    qmodel_latest: 'Qwen 3.7 Max',
+                    dmodel: 'DeepSeek V4 Pro',
+                    dfmodel: 'DeepSeek V4 Flash',
+                    gm51model: 'GLM 5.1',
+                    kmodel: 'Kimi K2.6',
+                    mmodel: 'MiniMax M2.7',
+                };
+                const raw = String(item.model || '');
+                return names[raw] ? `${names[raw]} (${raw})` : raw;
+            }
+            return '';
         }
 
         function primaryModelLabel(item) {
